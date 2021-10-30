@@ -15,7 +15,7 @@ class MqttSocketSessionTest {
     @Test
     fun connect() = block {
         val connectionRequest = ConnectionRequest(payload = ConnectionRequest.Payload(clientId = MqttUtf8String("taco")))
-        val socketSession = MqttSocketSession.openConnection(this, connectionRequest, 1883u, "broker.hivemq.com")
+        val socketSession = MqttSocketSession.openConnection(this, connectionRequest, 1883u)
         socketSession.write(DisconnectNotification)
         assertTrue(socketSession.connack.isSuccessful)
     }

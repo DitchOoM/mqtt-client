@@ -21,8 +21,7 @@ jobs:
         env:
           GPG_PRIVATE_KEY: ${{ secrets.GPG_SECRET }}
           PASSPHRASE: ${{ secrets.GPG_SIGNING_PASSWORD }}
-      - run: brew install mosquitto
-      - run: mosquitto -v
+      - run: "${GITHUB_WORKSPACE}/.github/mosquitto-osx.sh"
       - name: Test and deploy with Gradle
         env:
           SONATYPE_NEXUS_USERNAME: ${{ secrets.SONATYPE_NEXUS_USERNAME }}
