@@ -35,11 +35,11 @@ kotlin {
     sourceSets {
         val commonMain by getting {
             dependencies {
-                compileOnly("com.ditchoom:mqtt-5-models:1.0.2")
-                compileOnly("com.ditchoom:mqtt-4-models:1.0.4")
+                compileOnly("com.ditchoom:mqtt-5-models:1.0.4")
+                compileOnly("com.ditchoom:mqtt-4-models:1.0.6")
                 implementation("com.ditchoom:socket:1.0.4")
                 implementation("com.ditchoom:buffer:1.0.46")
-                implementation("com.ditchoom:mqtt-base-models:1.0.6")
+                implementation("com.ditchoom:mqtt-base-models:1.0.8")
                 implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.5.2")
                 implementation("org.jetbrains.kotlinx:atomicfu:0.16.3")
             }
@@ -47,8 +47,8 @@ kotlin {
         val commonTest by getting {
             dependencies {
                 implementation(kotlin("test"))
-                implementation("com.ditchoom:mqtt-5-models:1.0.2")
-                implementation("com.ditchoom:mqtt-4-models:1.0.4")
+                implementation("com.ditchoom:mqtt-5-models:1.0.4")
+                implementation("com.ditchoom:mqtt-4-models:1.0.6")
             }
         }
 
