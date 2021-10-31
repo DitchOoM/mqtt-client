@@ -28,7 +28,6 @@ class ControlPacketReader private constructor(private val bufferedControlPacketR
         bufferedControlPacketReader.close()
         incomingControlPacketChannel.cancel()
         incomingControlPacketChannel.close()
-        println(incomingControlPacketChannel)
     }
 
     companion object {

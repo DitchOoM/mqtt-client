@@ -41,6 +41,7 @@ kotlin {
                 implementation("com.ditchoom:buffer:1.0.46")
                 implementation("com.ditchoom:mqtt-base-models:1.0.6")
                 implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.5.2")
+                implementation("org.jetbrains.kotlinx:atomicfu:0.16.3")
             }
         }
         val commonTest by getting {

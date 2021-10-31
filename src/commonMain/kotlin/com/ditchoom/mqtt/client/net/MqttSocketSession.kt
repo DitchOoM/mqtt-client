@@ -26,6 +26,8 @@ class MqttSocketSession private constructor(
     private val scope: CoroutineScope,
 ): SuspendCloseable {
 
+    fun isOpen() = socket.isOpen()
+
     suspend fun write(vararg controlPackets: ControlPacket) {
         writer.write(controlPackets)
     }
