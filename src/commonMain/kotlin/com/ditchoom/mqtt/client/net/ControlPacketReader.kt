@@ -9,13 +9,17 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.yield
 import kotlin.time.Duration
 import kotlin.time.ExperimentalTime
+import kotlin.time.TimeMark
+import kotlin.time.TimeSource
 
 @ExperimentalTime
 class ControlPacketReader private constructor(private val bufferedControlPacketReader: BufferedControlPacketReader): SuspendCloseable {
     private val incomingControlPacketChannel = Channel<ControlPacket>()
     suspend fun read() = incomingControlPacketChannel.receive()
+    val start = TimeSource.Monotonic.markNow()
 
     private suspend fun listenForControlPackets()  {
         bufferedControlPacketReader.readControlPackets().collect { controlPacket ->

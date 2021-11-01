@@ -8,41 +8,52 @@ import com.ditchoom.buffer.toBuffer
 import com.ditchoom.mqtt.client.net.MqttSocketSession
 import com.ditchoom.mqtt.controlpacket.*
 import com.ditchoom.mqtt.controlpacket.ISubscription.RetainHandling
-import com.ditchoom.mqtt.controlpacket.QualityOfService.AT_LEAST_ONCE
-import com.ditchoom.mqtt.controlpacket.QualityOfService.AT_MOST_ONCE
+import com.ditchoom.mqtt.controlpacket.QualityOfService.*
 import com.ditchoom.mqtt.topic.Filter
 import com.ditchoom.mqtt.topic.Node
+import com.ditchoom.socket.clientSocket
 import kotlinx.atomicfu.atomic
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.*
+import kotlin.time.Duration
 import kotlin.time.ExperimentalTime
 
 @ExperimentalTime
 class MqttClient private constructor(
     private val scope: CoroutineScope,
     private val socketSession: MqttSocketSession,
-    connectionRequest: IConnectionRequest,
-    private val outgoing:Channel<ControlPacket>,
+    val connectionRequest: IConnectionRequest,
+    private val outgoing: Channel<ControlPacket>,
     private val incoming: SharedFlow<ControlPacket>,
 ): SuspendCloseable {
+
+    var pingRequestCount = 0L
+        private set
+    var pingResponseCount = 0L
+        private set
+
+    private val keepAliveDuration = Duration.seconds(connectionRequest.keepAliveTimeoutSeconds.toInt())
     private val packetFactory = connectionRequest.controlPacketFactory
     private val lastUsedPacketIdentifier = atomic(0)
-    private fun nextPacketIdentifier() = (lastUsedPacketIdentifier.incrementAndGet()).mod(UShort.SIZE_BYTES)
+    private fun nextPacketIdentifier() =
+        (lastUsedPacketIdentifier.incrementAndGet()).mod(UShort.MAX_VALUE.toInt())
 
+    fun publishAtMostOnce(topic: CharSequence) = publishAtMostOnce(topic, null as? PlatformBuffer?)
     fun publishAtMostOnce(topic: CharSequence, payload: String? = null) =
         publishAtMostOnce(topic, payload?.toBuffer())
 
     fun publishAtMostOnce(topic: CharSequence, payload: PlatformBuffer? = null) = scope.async {
-        outgoing.send(packetFactory.publish(qos = AT_MOST_ONCE, topicName = topic, payload = payload))
+        sendOutgoing(packetFactory.publish(qos = AT_MOST_ONCE, topicName = topic, payload = payload))
     }
 
+    fun publishAtLeastOnce(topic: CharSequence) = publishAtLeastOnce(topic, null as? PlatformBuffer?)
     fun publishAtLeastOnce(topic: CharSequence, payload: String? = null) =
         publishAtLeastOnce(topic, payload?.toBuffer())
 
     fun publishAtLeastOnce(topic: CharSequence, payload: PlatformBuffer? = null) = scope.async {
         val packetIdentifier = nextPacketIdentifier()
-        outgoing.send(
+        sendOutgoing(
             packetFactory.publish(
                 qos = AT_LEAST_ONCE,
                 topicName = topic,
@@ -50,11 +61,29 @@ class MqttClient private constructor(
                 packetIdentifier = packetIdentifier
             )
         )
-
         return@async incoming
             .filterIsInstance<IPublishAcknowledgment>()
             .filter { it.packetIdentifier == packetIdentifier }
-            .take(1)
+            .first()
+    }
+
+    fun publishExactlyOnce(topic: CharSequence) = publishExactlyOnce(topic, null as? PlatformBuffer?)
+    fun publishExactlyOnce(topic: CharSequence, payload: String? = null) =
+        publishExactlyOnce(topic, payload?.toBuffer())
+
+    fun publishExactlyOnce(topic: CharSequence, payload: PlatformBuffer? = null) = scope.async {
+        val packetIdentifier = nextPacketIdentifier()
+        sendOutgoing(
+            packetFactory.publish(
+                qos = EXACTLY_ONCE, topicName = topic, payload = payload, packetIdentifier = packetIdentifier))
+        val publishReceived = incoming
+            .filterIsInstance<IPublishReceived>()
+            .filter { it.packetIdentifier == packetIdentifier }
+            .first()
+        sendOutgoing(publishReceived.expectedResponse())
+        incoming
+            .filterIsInstance<IPublishComplete>()
+            .filter { it.packetIdentifier == packetIdentifier }
             .first()
     }
 
@@ -79,11 +108,10 @@ class MqttClient private constructor(
             serverReference,
             userProperty
         )
-        outgoing.send(sub)
+        sendOutgoing(sub)
         val subscribeAcknowledgment = incoming
             .filterIsInstance<ISubscribeAcknowledgement>()
             .filter { it.packetIdentifier == packetIdentifier }
-            .take(1)
             .first()
         if (callback != null) {
             observe(Filter(topicFilter), callback)
@@ -99,17 +127,34 @@ class MqttClient private constructor(
     ) = scope.async {
         val packetIdentifier = nextPacketIdentifier()
         val sub = packetFactory.subscribe(packetIdentifier, subscriptions, serverReference, userProperty)
-        outgoing.send(sub)
+        sendOutgoing(sub)
         val subscribeAcknowledgment = incoming
             .filterIsInstance<ISubscribeAcknowledgement>()
             .filter { it.packetIdentifier == packetIdentifier }
-            .take(1)
             .first()
 
         if (callback != null) {
             observeMany(subscriptions, callback)
         }
         return@async Pair(sub, subscribeAcknowledgment)
+    }
+
+    fun unsubscribe(
+        topic: String,
+        userProperty: List<Pair<CharSequence, CharSequence>> = emptyList()
+    ) = unsubscribe(setOf(topic), userProperty)
+
+    fun unsubscribe(
+        topics: Set<String>,
+        userProperty: List<Pair<CharSequence, CharSequence>> = emptyList()
+    ) = scope.async {
+        val packetIdentifier = nextPacketIdentifier()
+        val unsub = packetFactory.unsubscribe(packetIdentifier, topics, userProperty)
+        sendOutgoing(unsub)
+        val unsuback = incoming
+            .filterIsInstance<IUnsubscribeAcknowledgment>()
+            .first()
+        Pair(unsub, unsuback)
     }
 
     fun observeMany(subscriptions: Set<ISubscription>, callback: (IPublishMessage) -> Unit) {
@@ -142,8 +187,49 @@ class MqttClient private constructor(
         }
     }
 
+
+    fun ping() = scope.async {
+        sendOutgoing(packetFactory.pingRequest())
+        pingRequestCount++
+        incoming
+            .filterIsInstance<IPingResponse>()
+            .first()
+            .also {
+                pingResponseCount++
+            }
+    }
+
+    fun observePongs(callback: (IPingResponse) -> Unit) = scope.launch {
+        incoming.filterIsInstance<IPingResponse>()
+            .collect {
+                callback(it)
+            }
+    }
+
+    private suspend fun sendOutgoing(packet: ControlPacket) {
+        outgoing.send(packet)
+        // ensure the outgoing message has sent before un-suspending
+        yield()
+    }
+
+
+    private fun startKeepAliveTimer() = scope.launch {
+        if (keepAliveDuration < Duration.Companion.seconds(1)) {
+            return@launch
+        }
+        while (isActive && socketSession.isOpen()) {
+            var currentDelay = keepAliveDuration.minus(socketSession.lastMessageReceivedTimestamp.elapsedNow())
+            while (currentDelay > Duration.Companion.seconds(0)) {
+                delay(currentDelay)
+                currentDelay = keepAliveDuration.minus(socketSession.lastMessageReceivedTimestamp.elapsedNow())
+            }
+            ping().await()
+            delay(keepAliveDuration)
+        }
+    }
+
     override suspend fun close() {
-        outgoing.send(packetFactory.disconnect())
+        socketSession.write(packetFactory.disconnect())
         socketSession.close()
         scope.cancel()
     }
@@ -176,6 +262,7 @@ class MqttClient private constructor(
                     socketSession.write(payload)
                 }
             }
+            client.startKeepAliveTimer()
             client
         }
     }

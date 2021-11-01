@@ -3,6 +3,7 @@
 package com.ditchoom.mqtt.client.net
 
 import com.ditchoom.buffer.SuspendCloseable
+import com.ditchoom.buffer.allocateNewBuffer
 import com.ditchoom.mqtt.MalformedInvalidVariableByteInteger
 import com.ditchoom.mqtt.controlpacket.ControlPacketFactory
 import com.ditchoom.socket.ClientSocket
@@ -28,6 +29,7 @@ class BufferedControlPacketReader private constructor(
                 val remainingPayload = stream.sizedReadBuffer(remainingLength.toInt())
                 emit(controlPacketFactory.from(remainingPayload, byte1, remainingLength))
             }
+
         } catch (e: ClosedReceiveChannelException) {
 
         }

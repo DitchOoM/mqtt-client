@@ -10,12 +10,11 @@ import com.ditchoom.mqtt.controlpacket.IConnectionRequest
 import com.ditchoom.socket.ClientSocket
 import com.ditchoom.socket.SocketOptions
 import com.ditchoom.socket.getClientSocket
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.cancel
-import kotlinx.coroutines.plus
+import kotlinx.coroutines.*
 import kotlin.time.Duration
 import kotlin.time.ExperimentalTime
+import kotlin.time.TimeMark
+import kotlin.time.TimeSource
 
 @ExperimentalTime
 class MqttSocketSession private constructor(
@@ -25,6 +24,8 @@ class MqttSocketSession private constructor(
     private val writer: ControlPacketWriter,
     private val scope: CoroutineScope,
 ): SuspendCloseable {
+    var lastMessageReceivedTimestamp :TimeMark = TimeSource.Monotonic.markNow()
+        private set
 
     fun isOpen() = socket.isOpen()
 
@@ -32,11 +33,14 @@ class MqttSocketSession private constructor(
         writer.write(controlPackets)
     }
 
-    suspend fun read() = reader.read()
+    suspend fun read(): ControlPacket {
+        val packet = reader.read()
+        lastMessageReceivedTimestamp = TimeSource.Monotonic.markNow()
+        return packet
+    }
 
     override suspend fun close() {
         reader.close()
-        writer.close()
         socket.close()
         scope.cancel()
     }
@@ -53,7 +57,7 @@ class MqttSocketSession private constructor(
             val childScope = scope + Job()
             val socket = getClientSocket()
             socket.open(hostname = hostname, port = port, timeout = socketTimeout, socketOptions = socketOptions)
-            val writer = ControlPacketWriter.build(childScope, socket, connectionRequest)
+            val writer = ControlPacketWriter.build(socket, connectionRequest)
             writer.write(connectionRequest)
             val reader = ControlPacketReader.build(childScope, socket, connectionRequest)
             val response = reader.read()
