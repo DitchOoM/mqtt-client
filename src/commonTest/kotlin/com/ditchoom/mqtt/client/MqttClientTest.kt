@@ -7,6 +7,8 @@ import com.ditchoom.mqtt.controlpacket.format.ReasonCode
 import com.ditchoom.mqtt3.controlpacket.ConnectionRequest
 import com.ditchoom.mqtt3.controlpacket.DisconnectNotification
 import com.ditchoom.mqtt3.controlpacket.SubscribeAcknowledgement
+import com.ditchoom.socket.NetworkCapabilities
+import com.ditchoom.socket.getNetworkCapabilities
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
@@ -20,22 +22,33 @@ import kotlin.time.ExperimentalTime
 @ExperimentalTime
 class MqttClientTest {
 
-    private suspend fun prepareConnection(scope: CoroutineScope): MqttClient {
+    private suspend fun prepareConnection(scope: CoroutineScope, useWebsockets: Boolean = false): MqttClient {
         val connectionRequest = ConnectionRequest(
             ConnectionRequest.VariableHeader(cleanSession = true, keepAliveSeconds = 1),
             payload = ConnectionRequest.Payload(clientId = MqttUtf8String("testClient")))
-        return MqttClient.connect(scope, connectionRequest, 1883u).await()
+        val port = if (useWebsockets) 80u else 1883u
+        return MqttClient.connect(scope, connectionRequest, port.toUShort(), useWebsockets = useWebsockets).await()
     }
 
     @Test
     fun publishAtLeastOnce() = block {
+        if (getNetworkCapabilities() != NetworkCapabilities.FULL_SOCKET_ACCESS) return@block
         val client = prepareConnection(this)
+        assertNotNull(client.publishAtLeastOnce("taco", "cheese").await())
+        disconnect(client)
+    }
+
+
+    @Test
+    fun publishAtLeastOnceWebsocket() = block {
+        val client = prepareConnection(this, true)
         assertNotNull(client.publishAtLeastOnce("taco", "cheese").await())
         disconnect(client)
     }
 
     @Test
     fun publishAtMostOnce() = block {
+        if (getNetworkCapabilities() != NetworkCapabilities.FULL_SOCKET_ACCESS) return@block
         val client = prepareConnection(this)
         client.publishAtMostOnce("taco", "cheese").await()
         disconnect(client)
@@ -43,6 +56,7 @@ class MqttClientTest {
 
     @Test
     fun validateKeepAliveAutomaticCount() = block {
+        if (getNetworkCapabilities() != NetworkCapabilities.FULL_SOCKET_ACCESS) return@block
         val client = prepareConnection(this)
         val expectedPingResponseCount = 1L
         delay(seconds(client.connectionRequest.keepAliveTimeoutSeconds.toInt()) + milliseconds(100))
@@ -52,6 +66,7 @@ class MqttClientTest {
 
     @Test
     fun validateKeepAliveCallback() = block {
+        if (getNetworkCapabilities() != NetworkCapabilities.FULL_SOCKET_ACCESS) return@block
         var count = 0L
         val client = prepareConnection(this)
         client.observePongs {
@@ -65,6 +80,7 @@ class MqttClientTest {
 
     @Test
     fun pingPongWorks() = block {
+        if (getNetworkCapabilities() != NetworkCapabilities.FULL_SOCKET_ACCESS) return@block
         val client = prepareConnection(this)
         assertIs<IPingResponse>(client.ping().await())
         disconnect(client)
@@ -72,6 +88,7 @@ class MqttClientTest {
 
     @Test
     fun subscribePublishAndUnsubscribe() = block {
+        if (getNetworkCapabilities() != NetworkCapabilities.FULL_SOCKET_ACCESS) return@block
         val client = prepareConnection(this)
         var messagesReceived = 0
         val (sub, suback) = client.subscribe("taco") {

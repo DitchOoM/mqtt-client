@@ -5,13 +5,11 @@ package com.ditchoom.mqtt.client
 import com.ditchoom.buffer.PlatformBuffer
 import com.ditchoom.buffer.SuspendCloseable
 import com.ditchoom.buffer.toBuffer
-import com.ditchoom.mqtt.client.net.MqttSocketSession
 import com.ditchoom.mqtt.controlpacket.*
 import com.ditchoom.mqtt.controlpacket.ISubscription.RetainHandling
 import com.ditchoom.mqtt.controlpacket.QualityOfService.*
 import com.ditchoom.mqtt.topic.Filter
 import com.ditchoom.mqtt.topic.Node
-import com.ditchoom.socket.clientSocket
 import kotlinx.atomicfu.atomic
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
@@ -241,20 +239,23 @@ class MqttClient private constructor(
             connectionRequest: IConnectionRequest,
             port: UShort,
             hostname: String = "localhost",
+            useWebsockets: Boolean = false,
         ) = scope.async {
             val clientScope = this + Job()
             val outgoing = Channel<ControlPacket>()
             val incoming = MutableSharedFlow<ControlPacket>()
-            val socketSession = MqttSocketSession.openConnection(clientScope, connectionRequest, port, hostname)
+            val socketSession = MqttSocketSession.openConnection(connectionRequest, port, hostname, useWebsockets)
             val client = MqttClient(clientScope, socketSession,  connectionRequest, outgoing, incoming)
             clientScope.launch {
-                while (socketSession.isOpen()) {
-                    val read = socketSession.read()
-                    incoming.emit(read)
-                    if (read is IDisconnectNotification) {
-                        client.close()
+                try {
+                    while (socketSession.isOpen()) {
+                        val read = socketSession.read()
+                        incoming.emit(read)
+                        if (read is IDisconnectNotification) {
+                            client.close()
+                        }
                     }
-                }
+                } catch (e: Exception) {}
             }
             clientScope.launch {
                 while (socketSession.isOpen()) {
