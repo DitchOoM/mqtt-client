@@ -3,6 +3,7 @@
 package com.ditchoom.mqtt.client
 
 import com.ditchoom.buffer.PlatformBuffer
+import com.ditchoom.buffer.ReadBuffer
 import com.ditchoom.buffer.SuspendCloseable
 import com.ditchoom.data.Writer
 import com.ditchoom.mqtt.MqttException
@@ -58,7 +59,9 @@ class MqttSocketSession private constructor(
                 s
             }
             val connect = connectionRequest.toBuffer()
+            println("writing $connect ${byteArray(connect)}")
             val bytes = socket.write(connect, socketTimeout)
+            println("mqtt wrote $connect $bytes")
             val bufferedControlPacketReader =
                 BufferedControlPacketReader(connectionRequest.controlPacketFactory, socketTimeout, socket)
             val response = bufferedControlPacketReader.readControlPacket()
@@ -69,6 +72,16 @@ class MqttSocketSession private constructor(
                 "Invalid response received. Expected ConnectionAcknowledgment, instead received $response",
                 0x81.toUByte()
             )
+        }
+
+
+        fun byteArray(dataRead: ReadBuffer): List<String> {
+            val position = dataRead.position()
+            dataRead.position(0)
+            val byteArray = dataRead.readByteArray(dataRead.limit())
+            val c = byteArray.map { it.toString() }
+            dataRead.position(position.toInt())
+            return c
         }
     }
 }

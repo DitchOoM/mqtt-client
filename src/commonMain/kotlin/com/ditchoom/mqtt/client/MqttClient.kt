@@ -207,7 +207,7 @@ class MqttClient private constructor(
     private suspend fun sendOutgoing(packet: ControlPacket) {
         outgoing.send(packet)
         // ensure the outgoing message has sent before un-suspending
-        yield()
+//        yield()
     }
 
 
@@ -250,6 +250,7 @@ class MqttClient private constructor(
                 try {
                     while (socketSession.isOpen()) {
                         val read = socketSession.read()
+                        println("recv $read")
                         incoming.emit(read)
                         if (read is IDisconnectNotification) {
                             client.close()
@@ -260,6 +261,7 @@ class MqttClient private constructor(
             clientScope.launch {
                 while (socketSession.isOpen()) {
                     val payload = outgoing.receive()
+                    println("writing $payload")
                     socketSession.write(payload)
                 }
             }
