@@ -23,9 +23,7 @@ class BufferedControlPacketReader(
     suspend fun readControlPacket(): ControlPacket {
         val byte1 = inputStream.readUnsignedByte()
         val remainingLength = readVariableByteInteger()
-        println("b1: $byte1 rL: $remainingLength $inputStream")
         val cp = factory.from(inputStream.sizedReadBuffer(remainingLength.toInt()), byte1, remainingLength)
-        println("incoming $cp")
         return cp
     }
 

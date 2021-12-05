@@ -28,4 +28,16 @@ class MqttSocketSessionTest {
 
         socketSession.write(DisconnectNotification)
     }
+
+    @Test
+    fun connectWebsockets() = block {
+        val connectionRequest = ConnectionRequest(payload = ConnectionRequest.Payload(clientId = MqttUtf8String("taco")))
+        val socketSession = MqttSocketSession.openConnection(connectionRequest, 80u, useWebsockets = true)
+        assertTrue(socketSession.connack.isSuccessful)
+        socketSession.write(connectionRequest.controlPacketFactory.publish(
+            topicName = "testtt", qos = QualityOfService.AT_MOST_ONCE
+        ))
+
+        socketSession.write(DisconnectNotification)
+    }
 }

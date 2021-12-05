@@ -121,6 +121,8 @@ class MqttClientTest {
 
     @Test
     fun pingPongWorksWebsockets() = block {
+        // browser only supports websockets but does not support ping/pong
+        if (getNetworkCapabilities() != NetworkCapabilities.FULL_SOCKET_ACCESS) return@block
         val client = prepareConnection(this, true)
         assertIs<IPingResponse>(client.ping().await())
         disconnect(client)
@@ -131,12 +133,14 @@ class MqttClientTest {
         if (getNetworkCapabilities() != NetworkCapabilities.FULL_SOCKET_ACCESS) return@block
         val client = prepareConnection(this)
         subscribePublishAndUnsubscribeImpl(client)
+        disconnect(client)
     }
 
     @Test
     fun subscribePublishAndUnsubscribeWebsockets() = block {
         val client = prepareConnection(this, true)
         subscribePublishAndUnsubscribeImpl(client)
+        disconnect(client)
     }
 
     suspend fun subscribePublishAndUnsubscribeImpl(client: MqttClient) {
@@ -147,14 +151,12 @@ class MqttClientTest {
         val reasonCode = (suback as SubscribeAcknowledgement).payload.first()
         assertTrue(reasonCode == ReasonCode.GRANTED_QOS_0 || reasonCode == ReasonCode.GRANTED_QOS_1)
         client.publishAtLeastOnce("taco")
-        println("ubsubing")
         client.unsubscribe("taco").await()
-        println("unsub'd")
-//        client.publishAtLeastOnce("taco").await()
-//        client.publishExactlyOnce("only1").await()
-        println("disconnecting")
+        client.publishAtLeastOnce("taco").await()
+        client.publishExactlyOnce("only1").await()
+
         disconnect(client)
-        println("disconnected")
+
         assertEquals(1, messagesReceived)
     }
 
