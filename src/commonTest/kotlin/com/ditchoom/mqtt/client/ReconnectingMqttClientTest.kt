@@ -26,7 +26,7 @@ class ReconnectingMqttClientTest {
         return ReconnectingMqttClient.stayConnected(scope, connectionRequest, port.toUShort(), useWebsockets = useWebsockets) as Pair<ReconnectingMqttClient, CancelConnection>
     }
 
-    @Test
+//    @Test
     fun reconnectsOnce() = block {
         if (getNetworkCapabilities() != NetworkCapabilities.FULL_SOCKET_ACCESS) return@block
         val (client, cancellation) = prepareConnection(this)
@@ -34,7 +34,7 @@ class ReconnectingMqttClientTest {
         // cancel the keep alive timer. the server will disconnect the client if it exceeds 1.5x the keep alive timer
         cancellation.ignoreKeepAlive()
         println("\r\nawaitClientConnection 1")
-        val firstClientSession = client.awaitClientConnection()
+//        val firstClientSession = client.awaitClientConnection()
 //        println("\r\nwaitUntilDisconnectAsync")
 //        firstClientSession.waitUntilDisconnectAsync()
 

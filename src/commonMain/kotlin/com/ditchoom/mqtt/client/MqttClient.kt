@@ -251,18 +251,22 @@ class MqttClient private constructor(
                 client.close()
             }
             clientScope.launch {
-                // First dequeue all the queued packets that were not acknowledged
+                try {
+                    // First dequeue all the queued packets that were not acknowledged
 //                var queuedPacket = persistence.readNextControlPacketOrNull()
 //                while (socketSession.isOpen() && queuedPacket != null) {
 //                    socketSession.write(queuedPacket)
 //                    queuedPacket = persistence.readNextControlPacketOrNull()
 //                }
-                // Now write the other messages
-                while (socketSession.isOpen()) {
-                    val payload = outgoing.receive()
-                    socketSession.write(payload)
+                    // Now write the other messages
+                    while (socketSession.isOpen()) {
+                        val payload = outgoing.receive()
+                        socketSession.write(payload)
+                    }
+                    client.close()
+                } catch (e: NullPointerException) {
+                    // ignore
                 }
-                client.close()
             }
             client
         }
