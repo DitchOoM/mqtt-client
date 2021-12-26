@@ -5,17 +5,13 @@ import com.ditchoom.mqtt.controlpacket.IPingResponse
 import com.ditchoom.mqtt.controlpacket.MqttUtf8String
 import com.ditchoom.mqtt.controlpacket.format.ReasonCode
 import com.ditchoom.mqtt3.controlpacket.ConnectionRequest
-import com.ditchoom.mqtt3.controlpacket.DisconnectNotification
 import com.ditchoom.mqtt3.controlpacket.SubscribeAcknowledgement
-import com.ditchoom.socket.ClientSocket
 import com.ditchoom.socket.NetworkCapabilities
 import com.ditchoom.socket.getNetworkCapabilities
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.yield
+import kotlin.random.Random
 import kotlin.test.*
-import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.ExperimentalTime
@@ -24,11 +20,13 @@ import kotlin.time.ExperimentalTime
 class MqttClientTest {
 
     private suspend fun prepareConnection(scope: CoroutineScope, useWebsockets: Boolean = false): MqttClient {
+        val clientIdPrefix = if (useWebsockets) "testClientWS-" else "testClient-"
+        val clientId = clientIdPrefix + Random.nextInt()
         val connectionRequest = ConnectionRequest(
             ConnectionRequest.VariableHeader(cleanSession = true, keepAliveSeconds = 1),
-            payload = ConnectionRequest.Payload(clientId = MqttUtf8String("testClient")))
+            payload = ConnectionRequest.Payload(clientId = MqttUtf8String(clientId)))
         val port = if (useWebsockets) 80u else 1883u
-        return MqttClient.connect(scope, connectionRequest, port.toUShort(), useWebsockets = useWebsockets).await()
+        return MqttClient.connectOnce(scope, connectionRequest, port.toUShort(), useWebsockets = useWebsockets).await()
     }
 
     @Test

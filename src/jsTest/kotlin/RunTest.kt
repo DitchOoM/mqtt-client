@@ -16,7 +16,7 @@ fun <T> runTestInternal(
         } catch (e: UnsupportedOperationException) {
 
         } catch (e: Exception) {
-            cancel("failed promise", e)
+            e.printStackTrace()
         }
         return@promise null
     }

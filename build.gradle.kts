@@ -11,6 +11,7 @@ group = "com.ditchoom"
 version = "$libraryVersionPrefix.0-SNAPSHOT"
 
 repositories {
+    mavenLocal()
     google()
     mavenCentral()
 }
@@ -29,23 +30,22 @@ kotlin {
     }
     js {
         binaries.executable()
-        nodejs{
-            testTask {
-                useMocha {
-                    timeout = "1500ms"
-                }
-            }
-        }
+        nodejs{}
+        browser{}
     }
 
     sourceSets {
         val commonMain by getting {
             dependencies {
-                compileOnly("com.ditchoom:mqtt-5-models:1.0.5")
-                compileOnly("com.ditchoom:mqtt-4-models:1.0.8")
-                implementation("com.ditchoom:socket:1.0.8")
-                implementation("com.ditchoom:buffer:1.0.46")
-                implementation("com.ditchoom:mqtt-base-models:1.0.11")
+                compileOnly("com.ditchoom:mqtt-4-models:1.0.13")
+                compileOnly("com.ditchoom:mqtt-5-models:1.0.10")
+                implementation("com.ditchoom:socket") {
+                    version {
+                        strictly("1.0.15")
+                    }
+                }
+                implementation("com.ditchoom:buffer:1.0.53")
+                implementation("com.ditchoom:mqtt-base-models:1.0.16")
                 implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.5.2")
                 implementation("org.jetbrains.kotlinx:atomicfu:0.16.3")
             }
@@ -53,8 +53,8 @@ kotlin {
         val commonTest by getting {
             dependencies {
                 implementation(kotlin("test"))
-                implementation("com.ditchoom:mqtt-5-models:1.0.5")
-                implementation("com.ditchoom:mqtt-4-models:1.0.8")
+                implementation("com.ditchoom:mqtt-4-models:1.0.13")
+                implementation("com.ditchoom:mqtt-5-models:1.0.10")
             }
         }
 

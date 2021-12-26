@@ -28,10 +28,11 @@ class MqttSocketSession private constructor(
     private val reader: BufferedControlPacketReader,
     private val closable: SuspendCloseable,
 ): SuspendCloseable {
+    private var isClosed = false
     var lastMessageReceivedTimestamp :TimeMark = TimeSource.Monotonic.markNow()
         private set
 
-    fun isOpen() = reader.isOpen()
+    fun isOpen() = !isClosed && reader.isOpen()
 
     suspend fun write(vararg controlPackets: ControlPacket) {
         writer.write(controlPackets.toBuffer(), timeout)
@@ -40,6 +41,7 @@ class MqttSocketSession private constructor(
     suspend fun read() = reader.readControlPacket()
 
     override suspend fun close() {
+        isClosed = true
         closable.close()
     }
 
