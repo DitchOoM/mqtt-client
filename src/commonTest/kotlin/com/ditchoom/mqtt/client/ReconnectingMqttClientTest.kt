@@ -13,6 +13,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.time.Duration
 import kotlin.time.ExperimentalTime
+import kotlin.time.TimeSource
 
 @ExperimentalTime
 class ReconnectingMqttClientTest {
@@ -23,27 +24,42 @@ class ReconnectingMqttClientTest {
             ConnectionRequest.VariableHeader(cleanSession = true, keepAliveSeconds = keepAliveSeconds),
             payload = ConnectionRequest.Payload(clientId = MqttUtf8String("testClient${Random.nextInt()}")))
         val port = if (useWebsockets) 80u else 1883u
+        @Suppress("UNCHECKED_CAST")
         return ReconnectingMqttClient.stayConnected(scope, connectionRequest, port.toUShort(), useWebsockets = useWebsockets) as Pair<ReconnectingMqttClient, CancelConnection>
     }
 
-//    @Test
+    @Test
     fun reconnectsOnce() = block {
         if (getNetworkCapabilities() != NetworkCapabilities.FULL_SOCKET_ACCESS) return@block
+        val start = TimeSource.Monotonic.markNow()
         val (client, cancellation) = prepareConnection(this)
         client.maxReconnectionCount = 1uL
         // cancel the keep alive timer. the server will disconnect the client if it exceeds 1.5x the keep alive timer
         cancellation.ignoreKeepAlive()
-        println("\r\nawaitClientConnection 1")
-//        val firstClientSession = client.awaitClientConnection()
-//        println("\r\nwaitUntilDisconnectAsync")
-//        firstClientSession.waitUntilDisconnectAsync()
+        val firstClientSession = client.awaitClientConnection()
+        println("waitUntilDisconnectAsync ${start.elapsedNow()}")
+        firstClientSession.waitUntilDisconnectAsync()
+        println("disconnected in ${start.elapsedNow()}, reconnecting")
+        client.awaitClientConnection()
+        // We should have atleast reconnected once by now
+        assertEquals(1uL, client.reconnectionCount)
+    }
 
-        println("\r\nwaitUntilDisconnectAsync done")
-//        client.awaitClientConnection()
-//
-//        println("\r\nawaitClientConnection done")
-//        // We should have atleast reconnected once by now
-//        assertEquals(1uL, client.reconnectionCount)
+
+    @Test
+    fun reconnectsOnceWebsockets() = block {
+        val start = TimeSource.Monotonic.markNow()
+        val (client, cancellation) = prepareConnection(this, true)
+        client.maxReconnectionCount = 1uL
+        // cancel the keep alive timer. the server will disconnect the client if it exceeds 1.5x the keep alive timer
+        cancellation.ignoreKeepAlive()
+        val firstClientSession = client.awaitClientConnection()
+        println("waitUntilDisconnectAsync ${start.elapsedNow()}")
+        firstClientSession.waitUntilDisconnectAsync()
+        println("disconnected in ${start.elapsedNow()}, reconnecting")
+        client.awaitClientConnection()
+        // We should have atleast reconnected once by now
+        assertEquals(1uL, client.reconnectionCount)
     }
 
     private suspend fun disconnect(client: IMqttClient) {

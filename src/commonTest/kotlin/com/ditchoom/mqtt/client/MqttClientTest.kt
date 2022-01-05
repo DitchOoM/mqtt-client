@@ -66,7 +66,7 @@ class MqttClientTest {
         if (getNetworkCapabilities() != NetworkCapabilities.FULL_SOCKET_ACCESS) return@block
         val client = prepareConnection(this)
         val expectedPingResponseCount = 1L
-        delay(seconds(client.connectionRequest.keepAliveTimeoutSeconds.toInt()) + milliseconds(100))
+        delay(client.connectionRequest.keepAliveTimeoutSeconds.toInt().seconds + 100.milliseconds)
         disconnect(client)
         assertEquals(expectedPingResponseCount, client.pingResponseCount)
     }
@@ -76,7 +76,7 @@ class MqttClientTest {
     fun validateKeepAliveAutomaticCountWebsockets() = block {
         val client = prepareConnection(this, true)
         val expectedPingResponseCount = 1L
-        delay(seconds(client.connectionRequest.keepAliveTimeoutSeconds.toInt()) + milliseconds(100))
+        delay(client.connectionRequest.keepAliveTimeoutSeconds.toInt().seconds + 100.milliseconds)
         disconnect(client)
         assertEquals(expectedPingResponseCount, client.pingResponseCount)
     }
@@ -90,7 +90,7 @@ class MqttClientTest {
             count++
         }
         val expectedPingResponseCount = 1L
-        delay(seconds(client.connectionRequest.keepAliveTimeoutSeconds.toInt()) + milliseconds(100))
+        delay(client.connectionRequest.keepAliveTimeoutSeconds.toInt().seconds + 100.milliseconds)
         disconnect(client)
         assertEquals(expectedPingResponseCount, count)
     }
@@ -104,7 +104,7 @@ class MqttClientTest {
             count++
         }
         val expectedPingResponseCount = 1L
-        delay(seconds(client.connectionRequest.keepAliveTimeoutSeconds.toInt()) + milliseconds(100))
+        delay(client.connectionRequest.keepAliveTimeoutSeconds.toInt().seconds + 100.milliseconds)
         disconnect(client)
         assertEquals(expectedPingResponseCount, count)
     }
@@ -143,7 +143,7 @@ class MqttClientTest {
 
     suspend fun subscribePublishAndUnsubscribeImpl(client: MqttClient) {
         var messagesReceived = 0
-        val (sub, suback) = client.subscribe("taco") {
+        val (_, suback) = client.subscribe("taco") {
             messagesReceived++
         }.await()
         val reasonCode = (suback as SubscribeAcknowledgement).payload.first()

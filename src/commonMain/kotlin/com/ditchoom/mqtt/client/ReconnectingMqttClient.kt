@@ -8,6 +8,7 @@ import com.ditchoom.mqtt.topic.Filter
 import com.ditchoom.mqtt.topic.Node
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.BroadcastChannel
+import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.*
 import kotlin.time.ExperimentalTime
@@ -24,6 +25,7 @@ class ReconnectingMqttClient private constructor(
     private val persistence = InMemoryPersistence()
     private val factory = connectionRequest.controlPacketFactory
     private val outgoingQueue = Channel<ControlPacket>()
+    private val connectedFlow = MutableSharedFlow<MqttClient>()
     private val incoming = MutableSharedFlow<ControlPacket>(Channel.UNLIMITED)
     private var shouldIgnoreKeepAlive = false
     var maxReconnectionCount = ULong.MAX_VALUE
@@ -47,11 +49,10 @@ class ReconnectingMqttClient private constructor(
     fun isConnected() = currentClient?.socketSession?.isOpen() ?: false
 
     val stayConnectedJob = scope.launch {
-        while (isActive && maxReconnectionCount > reconnectionCount) {
+        while (isActive && maxReconnectionCount >= reconnectionCount) {
             println("reconnect loop $reconnectionCount out of $maxReconnectionCount")
             try {
-                val deferred = MqttClient.connectOnce(this, connectionRequest, port, hostname, useWebsockets)
-                val client = deferred.await()
+                val client = MqttClient.connectOnce(this, connectionRequest, port, hostname, useWebsockets).await()
                 // client should be in a connected state
                 if (shouldIgnoreKeepAlive) {
                     client.keepAliveJob.cancel("keep alive")
@@ -59,7 +60,7 @@ class ReconnectingMqttClient private constructor(
                 currentClient = client
                 client.scope.launch {
                     try {
-                        while (isActive) {
+                        while (isActive && client.socketSession.isOpen()) {
                             val outgoingPacket = outgoingQueue.receive()
                             client.sendOutgoing(outgoingPacket)
                         }
@@ -69,7 +70,7 @@ class ReconnectingMqttClient private constructor(
                 }
                 client.scope.launch {
                     try {
-                        while (isActive) {
+                        while (isActive && client.socketSession.isOpen()) {
                             client.incoming.collect {
                                 incoming.emit(it)
                             }
@@ -78,18 +79,23 @@ class ReconnectingMqttClient private constructor(
                     }
                     client.close()
                 }
-                println("\r\nawaited disconnect")
+                if (connectedFlow.subscriptionCount.value > 0) {
+                    connectedFlow.emit(client)
+                }
+                client.waitUntilDisconnectAsync()
             } catch (e: CancellationException) {
-                return@launch
+                e.printStackTrace()
+
             } catch (t: Throwable) {
+                t.printStackTrace()
             } finally {
                 currentClient = null
                 reconnectionCount++
             }
         }
-
-        println("dones")
     }
+
+    suspend fun awaitClientConnection() = connectedFlow.asSharedFlow().first()
 
     override fun publishAtMostOnce(topic: CharSequence) :Deferred<Unit> {
         val nullBuffer :PlatformBuffer? = null

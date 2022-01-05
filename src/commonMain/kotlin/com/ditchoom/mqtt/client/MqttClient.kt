@@ -10,9 +10,11 @@ import com.ditchoom.mqtt.controlpacket.QualityOfService.*
 import com.ditchoom.mqtt.topic.Filter
 import com.ditchoom.mqtt.topic.Node
 import kotlinx.coroutines.*
+import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.*
 import kotlin.time.Duration
+import kotlin.time.Duration.Companion.seconds
 import kotlin.time.ExperimentalTime
 
 @ExperimentalTime
@@ -23,13 +25,13 @@ class MqttClient private constructor(
     private val outgoing: Channel<ControlPacket>,
     internal val incoming: SharedFlow<ControlPacket>,
 //    private val persistence: Persistence,
-): IMqttClient {
+) : IMqttClient {
     var pingRequestCount = 0L
         private set
     var pingResponseCount = 0L
         private set
 
-    private val keepAliveDuration = Duration.seconds(connectionRequest.keepAliveTimeoutSeconds.toInt())
+    private val keepAliveDuration = connectionRequest.keepAliveTimeoutSeconds.toInt().seconds
     private val packetFactory = connectionRequest.controlPacketFactory
     private var count = 1
 
@@ -87,7 +89,8 @@ class MqttClient private constructor(
     override fun publishExactlyOnce(topic: CharSequence, payload: PlatformBuffer?) = scope.async {
         val packetIdentifier = nextPacketIdentifier()
         val packet = packetFactory.publish(
-            qos = EXACTLY_ONCE, topicName = topic, payload = payload, packetIdentifier = packetIdentifier)
+            qos = EXACTLY_ONCE, topicName = topic, payload = payload, packetIdentifier = packetIdentifier
+        )
         //persistence.save(packetIdentifier, packet)
         sendOutgoing(packet)
         val publishReceived = incoming
@@ -96,6 +99,7 @@ class MqttClient private constructor(
             .first()
         publishExactlyOnceInternalStep2(publishReceived)
     }
+
     private suspend fun publishExactlyOnceInternalStep2(publishReceived: IPublishReceived) {
         val response = publishReceived.expectedResponse()
         //persistence.save(response.packetIdentifier, response)
@@ -104,7 +108,7 @@ class MqttClient private constructor(
             .filterIsInstance<IPublishComplete>()
             .filter { it.packetIdentifier == publishReceived.packetIdentifier }
             .first()
-            //.also { persistence.delete(it.packetIdentifier) }
+        //.also { persistence.delete(it.packetIdentifier) }
     }
 
     override fun subscribe(
@@ -198,12 +202,12 @@ class MqttClient private constructor(
 
     private fun startKeepAliveTimer() = scope.launch {
         try {
-            if (keepAliveDuration < Duration.Companion.seconds(1)) {
+            if (keepAliveDuration < 1.seconds) {
                 return@launch
             }
             while (isActive && socketSession.isOpen()) {
                 var currentDelay = keepAliveDuration.minus(socketSession.lastMessageReceivedTimestamp.elapsedNow())
-                while (currentDelay > Duration.Companion.seconds(0) && isActive) {
+                while (currentDelay > 0.seconds && isActive) {
                     delay(currentDelay)
                     currentDelay = keepAliveDuration.minus(socketSession.lastMessageReceivedTimestamp.elapsedNow())
                 }
@@ -215,10 +219,17 @@ class MqttClient private constructor(
     }
 
     override suspend fun close() {
-        try {
-            socketSession.write(packetFactory.disconnect())
-        } catch (e: NullPointerException) {}
-        socketSession.close()
+        if (socketSession.isOpen()) {
+            try {
+                socketSession.write(packetFactory.disconnect())
+            } catch (e: Exception) {
+            }
+            socketSession.close()
+        }
+    }
+
+    suspend fun waitUntilDisconnectAsync() {
+        socketSession.awaitClose()
     }
 
     @ExperimentalTime
@@ -236,7 +247,7 @@ class MqttClient private constructor(
             val outgoing = Channel<ControlPacket>()
             val incoming = MutableSharedFlow<ControlPacket>()
             val socketSession = MqttSocketSession.openConnection(connectionRequest, port, hostname, useWebsockets)
-            val client = MqttClient(clientScope, socketSession,  connectionRequest, outgoing, incoming)//, persistence)
+            val client = MqttClient(clientScope, socketSession, connectionRequest, outgoing, incoming)//, persistence)
             clientScope.launch {
                 try {
                     while (socketSession.isOpen()) {
@@ -248,7 +259,6 @@ class MqttClient private constructor(
                     }
                 } catch (t: Throwable) {
                 }
-                client.close()
             }
             clientScope.launch {
                 try {
@@ -263,8 +273,8 @@ class MqttClient private constructor(
                         val payload = outgoing.receive()
                         socketSession.write(payload)
                     }
-                    client.close()
-                } catch (e: NullPointerException) {
+//                    client.socketSession.close()
+                } catch (e: Exception) {
                     // ignore
                 }
             }

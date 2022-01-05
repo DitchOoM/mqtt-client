@@ -10,6 +10,7 @@ import kotlin.experimental.and
 import kotlin.time.Duration
 import kotlin.time.ExperimentalTime
 
+@ExperimentalUnsignedTypes
 @ExperimentalTime
 class BufferedControlPacketReader(
     private val factory: ControlPacketFactory,

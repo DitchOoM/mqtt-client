@@ -1,5 +1,5 @@
 plugins {
-    kotlin("multiplatform") version "1.5.31"
+    kotlin("multiplatform") version "1.6.10"
     id("com.android.library")
     id("io.codearte.nexus-staging") version "0.30.0"
     `maven-publish`
@@ -29,32 +29,40 @@ kotlin {
         }
     }
     js {
-        binaries.executable()
-        nodejs{}
-        browser{}
+        nodejs{
+            testTask {
+                useMocha {
+                    timeout = "30s"
+                }
+            }
+        }
+        browser{
+            testTask {
+                useKarma {
+                    useChromeHeadless()
+                }
+            }
+            binaries.executable()
+        }
     }
 
     sourceSets {
         val commonMain by getting {
             dependencies {
-                compileOnly("com.ditchoom:mqtt-4-models:1.0.13")
-                compileOnly("com.ditchoom:mqtt-5-models:1.0.10")
-                implementation("com.ditchoom:socket") {
-                    version {
-                        strictly("1.0.15")
-                    }
-                }
-                implementation("com.ditchoom:buffer:1.0.53")
-                implementation("com.ditchoom:mqtt-base-models:1.0.16")
-                implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.5.2")
-                implementation("org.jetbrains.kotlinx:atomicfu:0.16.3")
+                compileOnly("com.ditchoom:mqtt-4-models:1.0.15")
+                compileOnly("com.ditchoom:mqtt-5-models:1.0.11")
+                implementation("com.ditchoom:socket:1.0.31")
+                implementation("com.ditchoom:buffer:1.0.54")
+                implementation("com.ditchoom:mqtt-base-models:1.0.18")
+                implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.6.0")
+                implementation("org.jetbrains.kotlinx:atomicfu:0.17.0")
             }
         }
         val commonTest by getting {
             dependencies {
                 implementation(kotlin("test"))
-                implementation("com.ditchoom:mqtt-4-models:1.0.13")
-                implementation("com.ditchoom:mqtt-5-models:1.0.10")
+                implementation("com.ditchoom:mqtt-4-models:1.0.15")
+                implementation("com.ditchoom:mqtt-5-models:1.0.11")
             }
         }
 

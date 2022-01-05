@@ -3,19 +3,19 @@
 package com.ditchoom.mqtt.client
 
 import com.ditchoom.buffer.PlatformBuffer
-import com.ditchoom.buffer.ReadBuffer
 import com.ditchoom.buffer.SuspendCloseable
 import com.ditchoom.data.Writer
 import com.ditchoom.mqtt.MqttException
 import com.ditchoom.mqtt.controlpacket.ControlPacket
 import com.ditchoom.mqtt.controlpacket.IConnectionAcknowledgment
 import com.ditchoom.mqtt.controlpacket.IConnectionRequest
+import com.ditchoom.socket.SocketController
 import com.ditchoom.socket.SocketOptions
 import com.ditchoom.socket.getClientSocket
 import com.ditchoom.socket.getWebSocketClient
 import com.ditchoom.websocket.WebSocketConnectionOptions
-import kotlinx.coroutines.delay
 import kotlin.time.Duration
+import kotlin.time.Duration.Companion.seconds
 import kotlin.time.ExperimentalTime
 import kotlin.time.TimeMark
 import kotlin.time.TimeSource
@@ -26,7 +26,7 @@ class MqttSocketSession private constructor(
     private val timeout: Duration,
     private val writer: Writer<PlatformBuffer>,
     private val reader: BufferedControlPacketReader,
-    private val closable: SuspendCloseable,
+    private val socketController: SocketController,
 ): SuspendCloseable {
     private var isClosed = false
     var lastMessageReceivedTimestamp :TimeMark = TimeSource.Monotonic.markNow()
@@ -40,9 +40,13 @@ class MqttSocketSession private constructor(
 
     suspend fun read() = reader.readControlPacket()
 
+    suspend fun awaitClose() {
+        socketController.awaitClose()
+    }
+
     override suspend fun close() {
         isClosed = true
-        closable.close()
+        socketController.close()
     }
 
     companion object {
@@ -51,10 +55,10 @@ class MqttSocketSession private constructor(
             port: UShort,
             hostname: String = "localhost",
             useWebsockets: Boolean = false,
-            socketTimeout: Duration = Duration.seconds(connectionRequest.keepAliveTimeoutSeconds.toDouble() * 1.5),
+            socketTimeout: Duration = (connectionRequest.keepAliveTimeoutSeconds.toDouble() * 1.5).seconds,
             socketOptions: SocketOptions? = null,
         ): MqttSocketSession {
-            val socket =  if (useWebsockets) {
+            val socket = if (useWebsockets) {
                 getWebSocketClient(WebSocketConnectionOptions(hostname, port.toInt(), "mqtt", "/mqtt", socketTimeout))
             } else {
                 val s = getClientSocket()
