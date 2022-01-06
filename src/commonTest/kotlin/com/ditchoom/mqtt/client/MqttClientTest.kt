@@ -66,7 +66,7 @@ class MqttClientTest {
         if (getNetworkCapabilities() != NetworkCapabilities.FULL_SOCKET_ACCESS) return@block
         val client = prepareConnection(this)
         val expectedPingResponseCount = 1L
-        delay(client.connectionRequest.keepAliveTimeoutSeconds.toInt().seconds + 100.milliseconds)
+        delay(client.connectionRequest.keepAliveTimeoutSeconds.toInt().seconds * 1.5)
         disconnect(client)
         assertEquals(expectedPingResponseCount, client.pingResponseCount)
     }
@@ -76,7 +76,7 @@ class MqttClientTest {
     fun validateKeepAliveAutomaticCountWebsockets() = block {
         val client = prepareConnection(this, true)
         val expectedPingResponseCount = 1L
-        delay(client.connectionRequest.keepAliveTimeoutSeconds.toInt().seconds + 100.milliseconds)
+        delay(client.connectionRequest.keepAliveTimeoutSeconds.toInt().seconds * 1.5)
         disconnect(client)
         assertEquals(expectedPingResponseCount, client.pingResponseCount)
     }
@@ -90,7 +90,7 @@ class MqttClientTest {
             count++
         }
         val expectedPingResponseCount = 1L
-        delay(client.connectionRequest.keepAliveTimeoutSeconds.toInt().seconds + 100.milliseconds)
+        delay(client.connectionRequest.keepAliveTimeoutSeconds.toInt().seconds * 1.5)
         disconnect(client)
         assertEquals(expectedPingResponseCount, count)
     }
@@ -104,7 +104,7 @@ class MqttClientTest {
             count++
         }
         val expectedPingResponseCount = 1L
-        delay(client.connectionRequest.keepAliveTimeoutSeconds.toInt().seconds + 100.milliseconds)
+        delay(client.connectionRequest.keepAliveTimeoutSeconds.toInt().seconds * 1.5)
         disconnect(client)
         assertEquals(expectedPingResponseCount, count)
     }
