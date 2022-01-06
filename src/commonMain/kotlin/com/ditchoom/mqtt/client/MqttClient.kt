@@ -24,7 +24,7 @@ class MqttClient private constructor(
     val connectionRequest: IConnectionRequest,
     private val outgoing: Channel<ControlPacket>,
     internal val incoming: SharedFlow<ControlPacket>,
-//    private val persistence: Persistence,
+    private val persistence: Persistence,
 ) : IMqttClient {
     var pingRequestCount = 0L
         private set
@@ -33,26 +33,22 @@ class MqttClient private constructor(
 
     private val keepAliveDuration = connectionRequest.keepAliveTimeoutSeconds.toInt().seconds
     private val packetFactory = connectionRequest.controlPacketFactory
-    private var count = 1
 
     internal val keepAliveJob = startKeepAliveTimer()
 
     init {
-//        scope.launch {
-//            incoming.collect { packet ->
-//                when (packet) {
-//                    is IPublishAcknowledgment -> persistence.delete(packet.packetIdentifier)
-//                    is IPublishReceived -> publishExactlyOnceInternalStep2(packet)
-//                    is IPublishComplete -> persistence.delete(packet.packetIdentifier)
-//                    is ISubscribeAcknowledgement -> persistence.delete(packet.packetIdentifier)
-//                    is IUnsubscribeAcknowledgment -> persistence.delete(packet.packetIdentifier)
-//                }
-//            }
-//        }
+        scope.launch(CoroutineName("$this: Automatic Message Handler on $socketSession")) {
+            incoming.collect { packet ->
+                when (packet) {
+                    is IPublishAcknowledgment -> persistence.delete(packet.packetIdentifier)
+                    is IPublishReceived -> publishExactlyOnceInternalStep2(packet)
+                    is IPublishComplete -> persistence.delete(packet.packetIdentifier)
+                    is ISubscribeAcknowledgement -> persistence.delete(packet.packetIdentifier)
+                    is IUnsubscribeAcknowledgment -> persistence.delete(packet.packetIdentifier)
+                }
+            }
+        }
     }
-
-
-    private suspend fun nextPacketIdentifier() = count++
 
     override fun publishAtMostOnce(topic: CharSequence) = publishAtMostOnce(topic, null as? PlatformBuffer?)
     override fun publishAtMostOnce(topic: CharSequence, payload: String?) =
@@ -67,7 +63,7 @@ class MqttClient private constructor(
         publishAtLeastOnce(topic, payload?.toBuffer())
 
     override fun publishAtLeastOnce(topic: CharSequence, payload: PlatformBuffer?) = scope.async {
-        val packetIdentifier = nextPacketIdentifier()
+        val packetIdentifier = persistence.nextPacketIdentifier()
         val packet = packetFactory.publish(
             qos = AT_LEAST_ONCE,
             topicName = topic,
@@ -87,7 +83,7 @@ class MqttClient private constructor(
         publishExactlyOnce(topic, payload?.toBuffer())
 
     override fun publishExactlyOnce(topic: CharSequence, payload: PlatformBuffer?) = scope.async {
-        val packetIdentifier = nextPacketIdentifier()
+        val packetIdentifier = persistence.nextPacketIdentifier()
         val packet = packetFactory.publish(
             qos = EXACTLY_ONCE, topicName = topic, payload = payload, packetIdentifier = packetIdentifier
         )
@@ -121,7 +117,7 @@ class MqttClient private constructor(
         userProperty: List<Pair<CharSequence, CharSequence>>,
         callback: ((IPublishMessage) -> Unit)?
     ) = scope.async {
-        val packetIdentifier = nextPacketIdentifier()
+        val packetIdentifier = persistence.nextPacketIdentifier()
         val sub = packetFactory.subscribe(
             packetIdentifier,
             topicFilter,
@@ -153,7 +149,7 @@ class MqttClient private constructor(
         topics: Set<String>,
         userProperty: List<Pair<CharSequence, CharSequence>>
     ) = scope.async {
-        val packetIdentifier = nextPacketIdentifier()
+        val packetIdentifier = persistence.nextPacketIdentifier()
         val unsub = packetFactory.unsubscribe(packetIdentifier, topics, userProperty)
         //persistence.save(packetIdentifier, unsub)
         sendOutgoing(unsub)
@@ -165,7 +161,7 @@ class MqttClient private constructor(
 
     override fun observe(topicFilter: Filter, callback: (IPublishMessage) -> Unit) {
         val topicNode = checkNotNull(topicFilter.validate()) { "Failed to validate topic filter" }
-        scope.launch {
+        scope.launch(CoroutineName("$this: Filtering for $topicFilter on $socketSession")) {
             incoming
                 .filterIsInstance<IPublishMessage>()
                 .filter {
@@ -189,7 +185,8 @@ class MqttClient private constructor(
             }
     }
 
-    fun observePongs(callback: (IPingResponse) -> Unit) = scope.launch {
+    fun observePongs(callback: (IPingResponse) -> Unit) = scope.launch(
+        CoroutineName("$this: Pong Observer $socketSession")) {
         incoming.filterIsInstance<IPingResponse>()
             .collect {
                 callback(it)
@@ -242,13 +239,13 @@ class MqttClient private constructor(
             hostname: String = "localhost",
             useWebsockets: Boolean = false,
         ): Deferred<MqttClient> = scope.async {
-//            val persistence: Persistence = InMemoryPersistence()
+            val persistence: Persistence = InMemoryPersistence()
             val clientScope = scope + Job()
             val outgoing = Channel<ControlPacket>()
             val incoming = MutableSharedFlow<ControlPacket>()
             val socketSession = MqttSocketSession.openConnection(connectionRequest, port, hostname, useWebsockets)
-            val client = MqttClient(clientScope, socketSession, connectionRequest, outgoing, incoming)//, persistence)
-            clientScope.launch {
+            val client = MqttClient(clientScope, socketSession, connectionRequest, outgoing, incoming, persistence)
+            clientScope.launch(CoroutineName("$this: Reading $socketSession @ $hostname:$port")) {
                 try {
                     while (socketSession.isOpen()) {
                         val read = socketSession.read()
@@ -260,7 +257,7 @@ class MqttClient private constructor(
                 } catch (t: Throwable) {
                 }
             }
-            clientScope.launch {
+            clientScope.launch(CoroutineName("$this: Writing $socketSession @ $hostname:$port")) {
                 try {
                     // First dequeue all the queued packets that were not acknowledged
 //                var queuedPacket = persistence.readNextControlPacketOrNull()

@@ -33,7 +33,7 @@ class ReconnectingMqttClient private constructor(
         private set
 
     init {
-        scope.launch {
+        scope.launch(CoroutineName("$this: Automatic Message Handler")) {
             incoming.collect { packet ->
                 when (packet) {
                     is IPublishAcknowledgment -> persistence.delete(packet.packetIdentifier)
@@ -48,7 +48,7 @@ class ReconnectingMqttClient private constructor(
 
     fun isConnected() = currentClient?.socketSession?.isOpen() ?: false
 
-    val stayConnectedJob = scope.launch {
+    val stayConnectedJob = scope.launch(CoroutineName("$this: Stay connected, reconnect if needed")) {
         while (isActive && maxReconnectionCount >= reconnectionCount) {
             println("reconnect loop $reconnectionCount out of $maxReconnectionCount")
             try {
@@ -58,7 +58,7 @@ class ReconnectingMqttClient private constructor(
                     client.keepAliveJob.cancel("keep alive")
                 }
                 currentClient = client
-                client.scope.launch {
+                client.scope.launch(CoroutineName("$this: Outgoing packet queue")) {
                     try {
                         while (isActive && client.socketSession.isOpen()) {
                             val outgoingPacket = outgoingQueue.receive()
@@ -68,7 +68,7 @@ class ReconnectingMqttClient private constructor(
                     }
                     client.close()
                 }
-                client.scope.launch {
+                client.scope.launch(CoroutineName("$this: Incoming packet queue")) {
                     try {
                         while (isActive && client.socketSession.isOpen()) {
                             client.incoming.collect {
@@ -213,7 +213,7 @@ class ReconnectingMqttClient private constructor(
 
     override fun observe(topicFilter: Filter, callback: (IPublishMessage) -> Unit) {
         val topicNode = checkNotNull(topicFilter.validate()) { "Failed to validate topic filter" }
-        scope.launch {
+        scope.launch(CoroutineName("$this: Filtering for $topicFilter")) {
             incoming
                 .filterIsInstance<IPublishMessage>()
                 .filter {
