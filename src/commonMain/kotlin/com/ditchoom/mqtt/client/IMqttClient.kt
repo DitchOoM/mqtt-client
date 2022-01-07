@@ -6,7 +6,7 @@ import com.ditchoom.mqtt.controlpacket.*
 import com.ditchoom.mqtt.topic.Filter
 import kotlinx.coroutines.Deferred
 
-interface IMqttClient: SuspendCloseable {
+interface IMqttClient : SuspendCloseable {
     fun publishAtMostOnce(topic: CharSequence): Deferred<Unit>
     fun publishAtMostOnce(topic: CharSequence, payload: String? = null): Deferred<Unit>
     fun publishAtMostOnce(topic: CharSequence, payload: PlatformBuffer? = null): Deferred<Unit>

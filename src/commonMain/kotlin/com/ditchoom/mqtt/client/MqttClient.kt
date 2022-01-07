@@ -10,10 +10,8 @@ import com.ditchoom.mqtt.controlpacket.QualityOfService.*
 import com.ditchoom.mqtt.topic.Filter
 import com.ditchoom.mqtt.topic.Node
 import kotlinx.coroutines.*
-import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.*
-import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.ExperimentalTime
 
@@ -70,7 +68,7 @@ class MqttClient private constructor(
             payload = payload,
             packetIdentifier = packetIdentifier
         )
-        //persistence.save(packetIdentifier, packet)
+        persistence.save(packetIdentifier, packet)
         sendOutgoing(packet)
         return@async incoming
             .filterIsInstance<IPublishAcknowledgment>()
@@ -87,7 +85,7 @@ class MqttClient private constructor(
         val packet = packetFactory.publish(
             qos = EXACTLY_ONCE, topicName = topic, payload = payload, packetIdentifier = packetIdentifier
         )
-        //persistence.save(packetIdentifier, packet)
+        persistence.save(packetIdentifier, packet)
         sendOutgoing(packet)
         val publishReceived = incoming
             .filterIsInstance<IPublishReceived>()
@@ -98,7 +96,7 @@ class MqttClient private constructor(
 
     private suspend fun publishExactlyOnceInternalStep2(publishReceived: IPublishReceived) {
         val response = publishReceived.expectedResponse()
-        //persistence.save(response.packetIdentifier, response)
+        persistence.save(response.packetIdentifier, response)
         sendOutgoing(response)
         incoming
             .filterIsInstance<IPublishComplete>()
@@ -128,7 +126,7 @@ class MqttClient private constructor(
             serverReference,
             userProperty
         )
-        //persistence.save(packetIdentifier, sub)
+        persistence.save(packetIdentifier, sub)
         sendOutgoing(sub)
         val subscribeAcknowledgment = incoming
             .filterIsInstance<ISubscribeAcknowledgement>()
@@ -151,7 +149,7 @@ class MqttClient private constructor(
     ) = scope.async {
         val packetIdentifier = persistence.nextPacketIdentifier()
         val unsub = packetFactory.unsubscribe(packetIdentifier, topics, userProperty)
-        //persistence.save(packetIdentifier, unsub)
+        persistence.save(packetIdentifier, unsub)
         sendOutgoing(unsub)
         val unsuback = incoming
             .filterIsInstance<IUnsubscribeAcknowledgment>()
@@ -186,7 +184,8 @@ class MqttClient private constructor(
     }
 
     fun observePongs(callback: (IPingResponse) -> Unit) = scope.launch(
-        CoroutineName("$this: Pong Observer $socketSession")) {
+        CoroutineName("$this: Pong Observer $socketSession")
+    ) {
         incoming.filterIsInstance<IPingResponse>()
             .collect {
                 callback(it)
@@ -260,11 +259,11 @@ class MqttClient private constructor(
             clientScope.launch(CoroutineName("$this: Writing $socketSession @ $hostname:$port")) {
                 try {
                     // First dequeue all the queued packets that were not acknowledged
-//                var queuedPacket = persistence.readNextControlPacketOrNull()
-//                while (socketSession.isOpen() && queuedPacket != null) {
-//                    socketSession.write(queuedPacket)
-//                    queuedPacket = persistence.readNextControlPacketOrNull()
-//                }
+                    var queuedPacket = persistence.readNextControlPacketOrNull()
+                    while (socketSession.isOpen() && queuedPacket != null) {
+                        socketSession.write(queuedPacket)
+                        queuedPacket = persistence.readNextControlPacketOrNull()
+                    }
                     // Now write the other messages
                     while (socketSession.isOpen()) {
                         val payload = outgoing.receive()

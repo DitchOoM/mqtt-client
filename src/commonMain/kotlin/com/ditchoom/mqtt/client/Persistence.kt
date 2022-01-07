@@ -14,7 +14,7 @@ interface Persistence {
     suspend fun readNextControlPacketOrNull(): ControlPacket?
 }
 
-class InMemoryPersistence: Persistence {
+class InMemoryPersistence : Persistence {
     private val queue = HashMap<Int, ControlPacket>()
     override suspend fun getAllPendingIds() = queue.keys
 
@@ -41,7 +41,7 @@ class InMemoryPersistence: Persistence {
         return queue[firstKey]
     }
 
-    object FakeControlPacket: ControlPacket {
+    object FakeControlPacket : ControlPacket {
         override val controlPacketFactory: ControlPacketFactory
             get() = throw UnsupportedOperationException()
         override val controlPacketValue: Byte

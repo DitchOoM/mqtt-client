@@ -27,9 +27,9 @@ class MqttSocketSession private constructor(
     private val writer: Writer<PlatformBuffer>,
     private val reader: BufferedControlPacketReader,
     private val socketController: SocketController,
-): SuspendCloseable {
+) : SuspendCloseable {
     private var isClosed = false
-    var lastMessageReceivedTimestamp :TimeMark = TimeSource.Monotonic.markNow()
+    var lastMessageReceivedTimestamp: TimeMark = TimeSource.Monotonic.markNow()
         private set
 
     fun isOpen() = !isClosed && reader.isOpen()

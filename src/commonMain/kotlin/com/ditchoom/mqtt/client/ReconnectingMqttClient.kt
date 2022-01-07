@@ -7,8 +7,6 @@ import com.ditchoom.mqtt.controlpacket.QualityOfService.AT_MOST_ONCE
 import com.ditchoom.mqtt.topic.Filter
 import com.ditchoom.mqtt.topic.Node
 import kotlinx.coroutines.*
-import kotlinx.coroutines.channels.BroadcastChannel
-import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.*
 import kotlin.time.ExperimentalTime
@@ -20,8 +18,8 @@ class ReconnectingMqttClient private constructor(
     private val port: UShort,
     private val hostname: String = "localhost",
     private val useWebsockets: Boolean = false,
-): IMqttClient {
-    internal var currentClient :MqttClient? = null
+) : IMqttClient {
+    internal var currentClient: MqttClient? = null
     private val persistence = InMemoryPersistence()
     private val factory = connectionRequest.controlPacketFactory
     private val outgoingQueue = Channel<ControlPacket>()
@@ -97,20 +95,20 @@ class ReconnectingMqttClient private constructor(
 
     suspend fun awaitClientConnection() = connectedFlow.asSharedFlow().first()
 
-    override fun publishAtMostOnce(topic: CharSequence) :Deferred<Unit> {
-        val nullBuffer :PlatformBuffer? = null
+    override fun publishAtMostOnce(topic: CharSequence): Deferred<Unit> {
+        val nullBuffer: PlatformBuffer? = null
         return publishAtMostOnce(topic, nullBuffer)
     }
 
-    override fun publishAtMostOnce(topic: CharSequence, payload: String?)
-        = publishAtMostOnce(topic, payload?.toBuffer())
+    override fun publishAtMostOnce(topic: CharSequence, payload: String?) =
+        publishAtMostOnce(topic, payload?.toBuffer())
 
     override fun publishAtMostOnce(topic: CharSequence, payload: PlatformBuffer?) = scope.async {
         outgoingQueue.send(factory.publish(qos = AT_MOST_ONCE, topicName = topic, payload = payload))
     }
 
-    override fun publishAtLeastOnce(topic: CharSequence) :Deferred<IPublishAcknowledgment> {
-        val nullBuffer :PlatformBuffer? = null
+    override fun publishAtLeastOnce(topic: CharSequence): Deferred<IPublishAcknowledgment> {
+        val nullBuffer: PlatformBuffer? = null
         return publishAtLeastOnce(topic, nullBuffer)
     }
 
@@ -129,7 +127,7 @@ class ReconnectingMqttClient private constructor(
     }
 
     override fun publishExactlyOnce(topic: CharSequence): Deferred<Unit> {
-        val nullBuffer :PlatformBuffer? = null
+        val nullBuffer: PlatformBuffer? = null
         return publishExactlyOnce(topic, nullBuffer)
     }
 
@@ -139,7 +137,11 @@ class ReconnectingMqttClient private constructor(
     override fun publishExactlyOnce(topic: CharSequence, payload: PlatformBuffer?) = scope.async {
         val packetIdentifier = persistence.nextPacketIdentifier()
         val packet = factory.publish(
-            qos = QualityOfService.EXACTLY_ONCE, topicName = topic, payload = payload, packetIdentifier = packetIdentifier)
+            qos = QualityOfService.EXACTLY_ONCE,
+            topicName = topic,
+            payload = payload,
+            packetIdentifier = packetIdentifier
+        )
         persistence.save(packetIdentifier, packet)
         outgoingQueue.send(packet)
         val publishReceived = incoming
@@ -148,6 +150,7 @@ class ReconnectingMqttClient private constructor(
             .first()
         publishExactlyOnceInternalStep2(publishReceived)
     }
+
     private suspend fun publishExactlyOnceInternalStep2(publishReceived: IPublishReceived) {
         val response = publishReceived.expectedResponse()
         persistence.save(response.packetIdentifier, response)
@@ -156,7 +159,7 @@ class ReconnectingMqttClient private constructor(
             .filterIsInstance<IPublishComplete>()
             .filter { it.packetIdentifier == publishReceived.packetIdentifier }
             .first()
-        .also { persistence.delete(it.packetIdentifier) }
+            .also { persistence.delete(it.packetIdentifier) }
     }
 
     override fun subscribe(
@@ -168,7 +171,7 @@ class ReconnectingMqttClient private constructor(
         serverReference: CharSequence?,
         userProperty: List<Pair<CharSequence, CharSequence>>,
         callback: ((IPublishMessage) -> Unit)?
-    )= scope.async {
+    ) = scope.async {
         val packetIdentifier = persistence.nextPacketIdentifier()
         val sub = factory.subscribe(
             packetIdentifier,
