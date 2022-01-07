@@ -11,7 +11,6 @@ group = "com.ditchoom"
 version = "$libraryVersionPrefix.0-SNAPSHOT"
 
 repositories {
-    mavenLocal()
     google()
     mavenCentral()
 }
@@ -49,11 +48,11 @@ kotlin {
     sourceSets {
         val commonMain by getting {
             dependencies {
-                compileOnly("com.ditchoom:mqtt-4-models:1.0.15")
-                compileOnly("com.ditchoom:mqtt-5-models:1.0.11")
+                compileOnly("com.ditchoom:mqtt-4-models:1.0.16")
+                compileOnly("com.ditchoom:mqtt-5-models:1.0.12")
                 implementation("com.ditchoom:socket:1.0.31")
                 implementation("com.ditchoom:buffer:1.0.54")
-                implementation("com.ditchoom:mqtt-base-models:1.0.18")
+                implementation("com.ditchoom:mqtt-base-models:1.0.19")
                 implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.6.0")
                 implementation("org.jetbrains.kotlinx:atomicfu:0.17.0")
             }
@@ -61,8 +60,8 @@ kotlin {
         val commonTest by getting {
             dependencies {
                 implementation(kotlin("test"))
-                implementation("com.ditchoom:mqtt-4-models:1.0.15")
-                implementation("com.ditchoom:mqtt-5-models:1.0.11")
+                implementation("com.ditchoom:mqtt-4-models:1.0.16")
+                implementation("com.ditchoom:mqtt-5-models:1.0.12")
             }
         }
 

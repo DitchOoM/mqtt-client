@@ -6,6 +6,7 @@ import com.ditchoom.mqtt.controlpacket.*
 import com.ditchoom.mqtt.controlpacket.QualityOfService.AT_MOST_ONCE
 import com.ditchoom.mqtt.topic.Filter
 import com.ditchoom.mqtt.topic.Node
+import com.ditchoom.mqtt3.controlpacket.SubscribeRequest
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.*
@@ -18,9 +19,9 @@ class ReconnectingMqttClient private constructor(
     private val port: UShort,
     private val hostname: String = "localhost",
     private val useWebsockets: Boolean = false,
+    private val persistence: Persistence = InMemoryPersistence(),
 ) : IMqttClient {
     internal var currentClient: MqttClient? = null
-    private val persistence = InMemoryPersistence()
     private val factory = connectionRequest.controlPacketFactory
     private val outgoingQueue = Channel<ControlPacket>()
     private val connectedFlow = MutableSharedFlow<MqttClient>()
@@ -30,27 +31,13 @@ class ReconnectingMqttClient private constructor(
     internal var reconnectionCount = 0uL
         private set
 
-    init {
-        scope.launch(CoroutineName("$this: Automatic Message Handler")) {
-            incoming.collect { packet ->
-                when (packet) {
-                    is IPublishAcknowledgment -> persistence.delete(packet.packetIdentifier)
-                    is IPublishReceived -> publishExactlyOnceInternalStep2(packet)
-                    is IPublishComplete -> persistence.delete(packet.packetIdentifier)
-                    is ISubscribeAcknowledgement -> persistence.delete(packet.packetIdentifier)
-                    is IUnsubscribeAcknowledgment -> persistence.delete(packet.packetIdentifier)
-                }
-            }
-        }
-    }
-
     fun isConnected() = currentClient?.socketSession?.isOpen() ?: false
 
     val stayConnectedJob = scope.launch(CoroutineName("$this: Stay connected, reconnect if needed")) {
         while (isActive && maxReconnectionCount >= reconnectionCount) {
             println("reconnect loop $reconnectionCount out of $maxReconnectionCount")
             try {
-                val client = MqttClient.connectOnce(this, connectionRequest, port, hostname, useWebsockets).await()
+                val client = MqttClient.connectOnce(this, connectionRequest, port, hostname, useWebsockets, persistence).await()
                 // client should be in a connected state
                 if (shouldIgnoreKeepAlive) {
                     client.keepAliveJob.cancel("keep alive")
@@ -107,58 +94,63 @@ class ReconnectingMqttClient private constructor(
         outgoingQueue.send(factory.publish(qos = AT_MOST_ONCE, topicName = topic, payload = payload))
     }
 
-    override fun publishAtLeastOnce(topic: CharSequence): Deferred<IPublishAcknowledgment> {
+    override fun publishAtLeastOnce(topic: CharSequence, persist: Boolean): Deferred<IPublishAcknowledgment> {
         val nullBuffer: PlatformBuffer? = null
         return publishAtLeastOnce(topic, nullBuffer)
     }
 
-    override fun publishAtLeastOnce(topic: CharSequence, payload: String?) =
+    override fun publishAtLeastOnce(topic: CharSequence, payload: String?, persist: Boolean) =
         publishAtLeastOnce(topic, payload?.toBuffer())
 
-    override fun publishAtLeastOnce(topic: CharSequence, payload: PlatformBuffer?) = scope.async {
-        val packetId = persistence.nextPacketIdentifier()
-        val pub = factory.publish(qos = AT_MOST_ONCE, topicName = topic, payload = payload, packetIdentifier = packetId)
-        persistence.save(packetId, pub)
-        outgoingQueue.send(pub)
+    override fun publishAtLeastOnce(topic: CharSequence, payload: PlatformBuffer?, persist: Boolean) = scope.async {
+       val packetId = sendMessageAndAwait(persist) { packetId ->
+           factory.publish(qos = AT_MOST_ONCE, topicName = topic, payload = payload, packetIdentifier = packetId)
+       }.first
         incoming
             .filterIsInstance<IPublishAcknowledgment>()
-            .filter { it.packetIdentifier == packetId }
-            .first()
+            .first { it.packetIdentifier == packetId }
     }
 
-    override fun publishExactlyOnce(topic: CharSequence): Deferred<Unit> {
+    private suspend fun sendMessageAndAwait(persist: Boolean, cb: suspend (Int) -> ControlPacket): Pair<Int, ControlPacket> {
+        val packetId = persistence.nextPacketIdentifier(persist)
+        val packet = cb(packetId)
+        if (persist) {
+            persistence.save(packetId, packet)
+        }
+        outgoingQueue.send(packet)
+        return Pair(packetId, packet)
+    }
+
+    override fun publishExactlyOnce(topic: CharSequence, persist: Boolean): Deferred<Unit> {
         val nullBuffer: PlatformBuffer? = null
         return publishExactlyOnce(topic, nullBuffer)
     }
 
-    override fun publishExactlyOnce(topic: CharSequence, payload: String?) =
+    override fun publishExactlyOnce(topic: CharSequence, payload: String?, persist: Boolean) =
         publishExactlyOnce(topic, payload?.toBuffer())
 
-    override fun publishExactlyOnce(topic: CharSequence, payload: PlatformBuffer?) = scope.async {
-        val packetIdentifier = persistence.nextPacketIdentifier()
-        val packet = factory.publish(
-            qos = QualityOfService.EXACTLY_ONCE,
-            topicName = topic,
-            payload = payload,
-            packetIdentifier = packetIdentifier
-        )
-        persistence.save(packetIdentifier, packet)
-        outgoingQueue.send(packet)
+    override fun publishExactlyOnce(topic: CharSequence, payload: PlatformBuffer?, persist: Boolean) = scope.async {
+        val packetId = sendMessageAndAwait(persist) { packetId ->
+            factory.publish(
+                qos = QualityOfService.EXACTLY_ONCE,
+                topicName = topic,
+                payload = payload,
+                packetIdentifier = packetId
+            )
+        }.first
         val publishReceived = incoming
             .filterIsInstance<IPublishReceived>()
-            .filter { it.packetIdentifier == packetIdentifier }
-            .first()
-        publishExactlyOnceInternalStep2(publishReceived)
+            .first { it.packetIdentifier == packetId }
+        publishExactlyOnceInternalStep2(publishReceived, persist)
     }
 
-    private suspend fun publishExactlyOnceInternalStep2(publishReceived: IPublishReceived) {
+    private suspend fun publishExactlyOnceInternalStep2(publishReceived: IPublishReceived, persist: Boolean) {
         val response = publishReceived.expectedResponse()
         persistence.save(response.packetIdentifier, response)
         outgoingQueue.send(response)
         incoming
             .filterIsInstance<IPublishComplete>()
-            .filter { it.packetIdentifier == publishReceived.packetIdentifier }
-            .first()
+            .first { it.packetIdentifier == publishReceived.packetIdentifier }
             .also { persistence.delete(it.packetIdentifier) }
     }
 
@@ -170,48 +162,48 @@ class ReconnectingMqttClient private constructor(
         retainHandling: ISubscription.RetainHandling,
         serverReference: CharSequence?,
         userProperty: List<Pair<CharSequence, CharSequence>>,
+        persist: Boolean,
         callback: ((IPublishMessage) -> Unit)?
     ) = scope.async {
-        val packetIdentifier = persistence.nextPacketIdentifier()
-        val sub = factory.subscribe(
-            packetIdentifier,
-            topicFilter,
-            maximumQos,
-            noLocal,
-            retainAsPublished,
-            retainHandling,
-            serverReference,
-            userProperty
-        )
-        persistence.save(packetIdentifier, sub)
-        outgoingQueue.send(sub)
+        val (packetIdentifier, sub) = sendMessageAndAwait(persist) { packetId ->
+            factory.subscribe(
+                packetId,
+                topicFilter,
+                maximumQos,
+                noLocal,
+                retainAsPublished,
+                retainHandling,
+                serverReference,
+                userProperty
+            )
+        }
         val subscribeAcknowledgment = incoming
             .filterIsInstance<ISubscribeAcknowledgement>()
-            .filter { it.packetIdentifier == packetIdentifier }
-            .first()
+            .first { it.packetIdentifier == packetIdentifier }
         if (callback != null) {
             observe(Filter(topicFilter), callback)
         }
-        return@async Pair(sub, subscribeAcknowledgment)
+        return@async Pair(sub as ISubscribeRequest, subscribeAcknowledgment)
     }
 
     override fun unsubscribe(
         topic: String,
+        persist: Boolean,
         userProperty: List<Pair<CharSequence, CharSequence>>
-    ) = unsubscribe(setOf(topic), userProperty)
+    ) = unsubscribe(setOf(topic), userProperty = userProperty)
 
     override fun unsubscribe(
         topics: Set<String>,
+        persist: Boolean,
         userProperty: List<Pair<CharSequence, CharSequence>>
     ) = scope.async {
-        val packetIdentifier = persistence.nextPacketIdentifier()
-        val unsub = factory.unsubscribe(packetIdentifier, topics, userProperty)
-        persistence.save(packetIdentifier, unsub)
-        outgoingQueue.send(unsub)
+        val (packetIdentifier, unsub) = sendMessageAndAwait(persist) { packetId ->
+            factory.unsubscribe(packetId, topics, userProperty)
+        }
         val unsuback = incoming
             .filterIsInstance<IUnsubscribeAcknowledgment>()
-            .first()
-        Pair(unsub, unsuback)
+            .first { it.packetIdentifier == packetIdentifier }
+        Pair(unsub as IUnsubscribeRequest, unsuback)
     }
 
     override fun observe(topicFilter: Filter, callback: (IPublishMessage) -> Unit) {
@@ -254,7 +246,7 @@ class ReconnectingMqttClient private constructor(
             hostname: String = "localhost",
             useWebsockets: Boolean = false,
         ): Pair<IMqttClient, CancelConnection> {
-            val scope = parentScope + Job()
+            val scope = parentScope + CoroutineName("ReconnectingMqttClient $hostname:$port") + Job()
             val client = ReconnectingMqttClient(scope, connectionRequest, port, hostname, useWebsockets)
             val cancelConnection = CancelConnection(client)
             return Pair(client, cancelConnection)

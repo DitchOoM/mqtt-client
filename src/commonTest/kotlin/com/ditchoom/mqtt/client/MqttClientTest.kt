@@ -12,7 +12,6 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
 import kotlin.random.Random
 import kotlin.test.*
-import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.ExperimentalTime
 
@@ -26,7 +25,7 @@ class MqttClientTest {
             ConnectionRequest.VariableHeader(cleanSession = true, keepAliveSeconds = 1),
             payload = ConnectionRequest.Payload(clientId = MqttUtf8String(clientId)))
         val port = if (useWebsockets) 80u else 1883u
-        return MqttClient.connectOnce(scope, connectionRequest, port.toUShort(), useWebsockets = useWebsockets).await()
+        return MqttClient.connectOnce(scope, connectionRequest, port.toUShort(), useWebsockets = useWebsockets, persistence = InMemoryPersistence()).await()
     }
 
     @Test

@@ -56,11 +56,14 @@ class MqttClient private constructor(
         sendOutgoing(packetFactory.publish(qos = AT_MOST_ONCE, topicName = topic, payload = payload))
     }
 
-    override fun publishAtLeastOnce(topic: CharSequence) = publishAtLeastOnce(topic, null as? PlatformBuffer?)
-    override fun publishAtLeastOnce(topic: CharSequence, payload: String?) =
+    override fun publishAtLeastOnce(topic: CharSequence, persist: Boolean) = publishAtLeastOnce(
+        topic,
+        null as? PlatformBuffer?
+    )
+    override fun publishAtLeastOnce(topic: CharSequence, payload: String?, persist: Boolean) =
         publishAtLeastOnce(topic, payload?.toBuffer())
 
-    override fun publishAtLeastOnce(topic: CharSequence, payload: PlatformBuffer?) = scope.async {
+    override fun publishAtLeastOnce(topic: CharSequence, payload: PlatformBuffer?, persist: Boolean) = scope.async {
         val packetIdentifier = persistence.nextPacketIdentifier()
         val packet = packetFactory.publish(
             qos = AT_LEAST_ONCE,
@@ -76,11 +79,11 @@ class MqttClient private constructor(
             .first()
     }
 
-    override fun publishExactlyOnce(topic: CharSequence) = publishExactlyOnce(topic, null as? PlatformBuffer?)
-    override fun publishExactlyOnce(topic: CharSequence, payload: String?) =
+    override fun publishExactlyOnce(topic: CharSequence, persist: Boolean) = publishExactlyOnce(topic, null as? PlatformBuffer?)
+    override fun publishExactlyOnce(topic: CharSequence, payload: String?, persist: Boolean) =
         publishExactlyOnce(topic, payload?.toBuffer())
 
-    override fun publishExactlyOnce(topic: CharSequence, payload: PlatformBuffer?) = scope.async {
+    override fun publishExactlyOnce(topic: CharSequence, payload: PlatformBuffer?, persist: Boolean) = scope.async {
         val packetIdentifier = persistence.nextPacketIdentifier()
         val packet = packetFactory.publish(
             qos = EXACTLY_ONCE, topicName = topic, payload = payload, packetIdentifier = packetIdentifier
@@ -113,6 +116,7 @@ class MqttClient private constructor(
         retainHandling: RetainHandling,
         serverReference: CharSequence?,
         userProperty: List<Pair<CharSequence, CharSequence>>,
+        persist: Boolean,
         callback: ((IPublishMessage) -> Unit)?
     ) = scope.async {
         val packetIdentifier = persistence.nextPacketIdentifier()
@@ -140,11 +144,13 @@ class MqttClient private constructor(
 
     override fun unsubscribe(
         topic: String,
+        persist: Boolean,
         userProperty: List<Pair<CharSequence, CharSequence>>
-    ) = unsubscribe(setOf(topic), userProperty)
+    ) = unsubscribe(setOf(topic), userProperty = userProperty)
 
     override fun unsubscribe(
         topics: Set<String>,
+        persist: Boolean,
         userProperty: List<Pair<CharSequence, CharSequence>>
     ) = scope.async {
         val packetIdentifier = persistence.nextPacketIdentifier()
@@ -237,8 +243,8 @@ class MqttClient private constructor(
             port: UShort,
             hostname: String = "localhost",
             useWebsockets: Boolean = false,
-        ): Deferred<MqttClient> = scope.async {
-            val persistence: Persistence = InMemoryPersistence()
+            persistence: Persistence,
+        ): Deferred<MqttClient> = scope.async(CoroutineName("$this: @$hostname:$port")) {
             val clientScope = scope + Job()
             val outgoing = Channel<ControlPacket>()
             val incoming = MutableSharedFlow<ControlPacket>()
@@ -259,10 +265,17 @@ class MqttClient private constructor(
             clientScope.launch(CoroutineName("$this: Writing $socketSession @ $hostname:$port")) {
                 try {
                     // First dequeue all the queued packets that were not acknowledged
-                    var queuedPacket = persistence.readNextControlPacketOrNull()
-                    while (socketSession.isOpen() && queuedPacket != null) {
-                        socketSession.write(queuedPacket)
-                        queuedPacket = persistence.readNextControlPacketOrNull()
+                    if (!connectionRequest.cleanStart) {
+                        var pair = persistence.readNextControlPacketOrNull()
+                        while (socketSession.isOpen() && pair != null) {
+                            val (packetId, packet) = pair
+                            if (packet is FakeControlPacket) {
+                                persistence.delete(packetId)
+                            } else {
+                                socketSession.write(packet)
+                            }
+                            pair = persistence.readNextControlPacketOrNull()
+                        }
                     }
                     // Now write the other messages
                     while (socketSession.isOpen()) {

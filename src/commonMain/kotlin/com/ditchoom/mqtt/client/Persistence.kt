@@ -2,30 +2,34 @@
 
 package com.ditchoom.mqtt.client
 
-import com.ditchoom.mqtt.controlpacket.ControlPacket
-import com.ditchoom.mqtt.controlpacket.ControlPacketFactory
+import com.ditchoom.mqtt.controlpacket.*
 import com.ditchoom.mqtt.controlpacket.format.fixed.DirectionOfFlow
+import kotlinx.atomicfu.AtomicInt
+import kotlinx.atomicfu.atomic
 
 interface Persistence {
     suspend fun getAllPendingIds(): Set<Int>
-    suspend fun nextPacketIdentifier(): Int
+    suspend fun nextPacketIdentifier(persist: Boolean = true): Int
     suspend fun save(packetIdentifier: Int, data: ControlPacket)
     suspend fun delete(id: Int)
-    suspend fun readNextControlPacketOrNull(): ControlPacket?
+    suspend fun readNextControlPacketOrNull(): Pair<Int, ControlPacket>?
 }
 
 class InMemoryPersistence : Persistence {
     private val queue = HashMap<Int, ControlPacket>()
     override suspend fun getAllPendingIds() = queue.keys
+    private val count = atomic(1)
 
-    override suspend fun nextPacketIdentifier(): Int {
-        for (i in 1..65535) {
-            if (!queue.containsKey(i)) {
-                queue[i] = FakeControlPacket
-                return i
-            }
+    override suspend fun nextPacketIdentifier(persist: Boolean): Int {
+        var nextId = count.incrementAndGet() % UShort.MAX_VALUE.toInt()
+        while (queue.containsKey(nextId)) {
+            nextId = count.incrementAndGet() % UShort.MAX_VALUE.toInt()
         }
-        throw IllegalStateException("Too many queued messages. Can't get a new packet identifier.")
+        if (persist) {
+            queue[nextId] = FakeControlPacket
+        }
+        return nextId
+//        throw IllegalStateException("Too many queued messages. Can't get a new packet identifier.")
     }
 
     override suspend fun save(packetIdentifier: Int, data: ControlPacket) {
@@ -36,20 +40,15 @@ class InMemoryPersistence : Persistence {
         queue.remove(id)
     }
 
-    override suspend fun readNextControlPacketOrNull(): ControlPacket? {
+    override suspend fun readNextControlPacketOrNull(): Pair<Int, ControlPacket>? {
         val firstKey = queue.keys.firstOrNull() ?: return null
-        return queue[firstKey]
+        val packet = queue[firstKey] ?: return null
+        return when (packet) {
+            is IPublishMessage -> packet.packetIdentifier?.let { Pair(it, packet) }
+            is ISubscribeRequest -> Pair(packet.packetIdentifier, packet)
+            is IUnsubscribeRequest -> Pair(packet.packetIdentifier, packet)
+            is IPublishRelease -> Pair(packet.packetIdentifier, packet)
+            else -> null
+        }
     }
-
-    object FakeControlPacket : ControlPacket {
-        override val controlPacketFactory: ControlPacketFactory
-            get() = throw UnsupportedOperationException()
-        override val controlPacketValue: Byte
-            get() = throw UnsupportedOperationException()
-        override val direction: DirectionOfFlow
-            get() = throw UnsupportedOperationException()
-        override val mqttVersion: Byte
-            get() = throw UnsupportedOperationException()
-    }
-
 }
