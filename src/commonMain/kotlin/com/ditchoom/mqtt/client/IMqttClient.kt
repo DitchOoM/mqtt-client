@@ -12,11 +12,26 @@ interface IMqttClient : SuspendCloseable {
     fun publishAtMostOnce(topic: CharSequence, payload: PlatformBuffer? = null): Deferred<Unit>
 
     fun publishAtLeastOnce(topic: CharSequence, persist: Boolean = true): Deferred<IPublishAcknowledgment>
-    fun publishAtLeastOnce(topic: CharSequence, payload: String? = null, persist: Boolean = true): Deferred<IPublishAcknowledgment>
-    fun publishAtLeastOnce(topic: CharSequence, payload: PlatformBuffer? = null, persist: Boolean = true): Deferred<IPublishAcknowledgment>
+    fun publishAtLeastOnce(
+        topic: CharSequence,
+        payload: String? = null,
+        persist: Boolean = true
+    ): Deferred<IPublishAcknowledgment>
+
+    fun publishAtLeastOnce(
+        topic: CharSequence,
+        payload: PlatformBuffer? = null,
+        persist: Boolean = true
+    ): Deferred<IPublishAcknowledgment>
+
     fun publishExactlyOnce(topic: CharSequence, persist: Boolean = true): Deferred<Unit>
     fun publishExactlyOnce(topic: CharSequence, payload: String? = null, persist: Boolean = true): Deferred<Unit>
-    fun publishExactlyOnce(topic: CharSequence, payload: PlatformBuffer? = null, persist: Boolean = true): Deferred<Unit>
+    fun publishExactlyOnce(
+        topic: CharSequence,
+        payload: PlatformBuffer? = null,
+        persist: Boolean = true
+    ): Deferred<Unit>
+
     fun subscribe(
         topicFilter: CharSequence,
         maximumQos: QualityOfService = QualityOfService.AT_LEAST_ONCE,

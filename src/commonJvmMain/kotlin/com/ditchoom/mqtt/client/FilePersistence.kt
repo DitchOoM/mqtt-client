@@ -11,7 +11,13 @@ import java.io.File
 import java.nio.channels.FileChannel
 
 @ExperimentalUnsignedTypes
-class FilePersistence(private val factory: ControlPacketFactory, clientId:String, host:String, port:Int, parentDirectory: File): Persistence {
+class FilePersistence(
+    private val factory: ControlPacketFactory,
+    clientId: String,
+    host: String,
+    port: Int,
+    parentDirectory: File
+) : Persistence {
     val localDirectory = File(File(parentDirectory, "$host:$port"), clientId).also { it.mkdirs() }
     val controlPacketDirectory = File(localDirectory, "control-packets").also { it.mkdirs() }
 
@@ -25,7 +31,7 @@ class FilePersistence(private val factory: ControlPacketFactory, clientId:String
 
     override suspend fun nextPacketIdentifier(persist: Boolean): Int {
         var packetId = 1
-        var file :File
+        var file: File
         withContext(Dispatchers.IO) {
             file = File(controlPacketDirectory, "$packetId")
             while (file.exists()) {

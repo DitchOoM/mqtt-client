@@ -23,9 +23,16 @@ class MqttClientTest {
         val clientId = clientIdPrefix + Random.nextInt()
         val connectionRequest = ConnectionRequest(
             ConnectionRequest.VariableHeader(cleanSession = true, keepAliveSeconds = 1),
-            payload = ConnectionRequest.Payload(clientId = MqttUtf8String(clientId)))
+            payload = ConnectionRequest.Payload(clientId = MqttUtf8String(clientId))
+        )
         val port = if (useWebsockets) 80u else 1883u
-        return MqttClient.connectOnce(scope, connectionRequest, port.toUShort(), useWebsockets = useWebsockets, persistence = InMemoryPersistence()).await()
+        return MqttClient.connectOnce(
+            scope,
+            connectionRequest,
+            port.toUShort(),
+            useWebsockets = useWebsockets,
+            persistence = InMemoryPersistence()
+        ).await()
     }
 
     @Test

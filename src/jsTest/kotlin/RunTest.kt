@@ -1,6 +1,5 @@
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.GlobalScope
-import kotlinx.coroutines.cancel
 import kotlinx.coroutines.promise
 import kotlin.js.Promise
 

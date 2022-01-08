@@ -3,8 +3,6 @@
 package com.ditchoom.mqtt.client
 
 import com.ditchoom.mqtt.controlpacket.*
-import com.ditchoom.mqtt.controlpacket.format.fixed.DirectionOfFlow
-import kotlinx.atomicfu.AtomicInt
 import kotlinx.atomicfu.atomic
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
@@ -42,7 +40,7 @@ class InMemoryPersistence : Persistence {
         queue.remove(id)
     }
 
-    override suspend fun queuedControlPackets()= flow {
+    override suspend fun queuedControlPackets() = flow {
         queue.forEach { (_, packet) ->
             val item = when (packet) {
                 is IPublishMessage -> packet.packetIdentifier?.let { Pair(it, packet) }

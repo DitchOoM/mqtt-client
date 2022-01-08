@@ -1,14 +1,12 @@
 package com.ditchoom.mqtt.client
 
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.nio.file.Files
 import java.nio.file.attribute.FileTime
-import kotlin.io.path.createFile
 
-suspend fun File.iterateFilesFast(accept:suspend (File)->Unit) = withContext(Dispatchers.IO) {
+suspend fun File.iterateFilesFast(accept: suspend (File) -> Unit) = withContext(Dispatchers.IO) {
     try {
         Files.newDirectoryStream(toPath()).use { stream ->
             stream.forEach { path ->
@@ -22,7 +20,7 @@ suspend fun File.iterateFilesFast(accept:suspend (File)->Unit) = withContext(Dis
     }
 }
 
-suspend fun File.oldestFile(accept:(File)->Boolean) = withContext(Dispatchers.IO) {
+suspend fun File.oldestFile(accept: (File) -> Boolean) = withContext(Dispatchers.IO) {
     var oldestFile: File? = null
     try {
         var oldestTime: FileTime? = null

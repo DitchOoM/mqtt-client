@@ -19,24 +19,30 @@ class MqttSocketSessionTest {
     @Test
     fun connect() = block {
         if (getNetworkCapabilities() != NetworkCapabilities.FULL_SOCKET_ACCESS) return@block
-        val connectionRequest = ConnectionRequest(payload = ConnectionRequest.Payload(clientId = MqttUtf8String("taco")))
+        val connectionRequest =
+            ConnectionRequest(payload = ConnectionRequest.Payload(clientId = MqttUtf8String("taco")))
         val socketSession = MqttSocketSession.openConnection(connectionRequest, 1883u)
         assertTrue(socketSession.connack.isSuccessful)
-        socketSession.write(connectionRequest.controlPacketFactory.publish(
-            topicName = "testtt", qos = QualityOfService.AT_MOST_ONCE
-        ))
+        socketSession.write(
+            connectionRequest.controlPacketFactory.publish(
+                topicName = "testtt", qos = QualityOfService.AT_MOST_ONCE
+            )
+        )
 
         socketSession.write(DisconnectNotification)
     }
 
     @Test
     fun connectWebsockets() = block {
-        val connectionRequest = ConnectionRequest(payload = ConnectionRequest.Payload(clientId = MqttUtf8String("taco")))
+        val connectionRequest =
+            ConnectionRequest(payload = ConnectionRequest.Payload(clientId = MqttUtf8String("taco")))
         val socketSession = MqttSocketSession.openConnection(connectionRequest, 80u, useWebsockets = true)
         assertTrue(socketSession.connack.isSuccessful)
-        socketSession.write(connectionRequest.controlPacketFactory.publish(
-            topicName = "testtt", qos = QualityOfService.AT_MOST_ONCE
-        ))
+        socketSession.write(
+            connectionRequest.controlPacketFactory.publish(
+                topicName = "testtt", qos = QualityOfService.AT_MOST_ONCE
+            )
+        )
 
         socketSession.write(DisconnectNotification)
     }

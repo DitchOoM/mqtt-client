@@ -42,7 +42,8 @@ class ReconnectingMqttClient private constructor(
                 isPaused = false
             }
             try {
-                val client = MqttClient.connectOnce(this, connectionRequest, port, hostname, useWebsockets, persistence).await()
+                val client =
+                    MqttClient.connectOnce(this, connectionRequest, port, hostname, useWebsockets, persistence).await()
                 // client should be in a connected state
                 if (shouldIgnoreKeepAlive) {
                     client.keepAliveJob.cancel("keep alive")
@@ -118,15 +119,18 @@ class ReconnectingMqttClient private constructor(
         publishAtLeastOnce(topic, payload?.toBuffer())
 
     override fun publishAtLeastOnce(topic: CharSequence, payload: PlatformBuffer?, persist: Boolean) = scope.async {
-       val packetId = sendMessageAndAwait(persist) { packetId ->
-           factory.publish(qos = AT_LEAST_ONCE, topicName = topic, payload = payload, packetIdentifier = packetId)
-       }.first
+        val packetId = sendMessageAndAwait(persist) { packetId ->
+            factory.publish(qos = AT_LEAST_ONCE, topicName = topic, payload = payload, packetIdentifier = packetId)
+        }.first
         incoming
             .filterIsInstance<IPublishAcknowledgment>()
             .first { it.packetIdentifier == packetId }
     }
 
-    private suspend fun sendMessageAndAwait(persist: Boolean, cb: suspend (Int) -> ControlPacket): Pair<Int, ControlPacket> {
+    private suspend fun sendMessageAndAwait(
+        persist: Boolean,
+        cb: suspend (Int) -> ControlPacket
+    ): Pair<Int, ControlPacket> {
         val packetId = persistence.nextPacketIdentifier(persist)
         val packet = cb(packetId)
         if (persist) {

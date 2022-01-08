@@ -60,6 +60,7 @@ class MqttClient private constructor(
         topic,
         null as? PlatformBuffer?
     )
+
     override fun publishAtLeastOnce(topic: CharSequence, payload: String?, persist: Boolean) =
         publishAtLeastOnce(topic, payload?.toBuffer())
 
@@ -79,7 +80,9 @@ class MqttClient private constructor(
             .first()
     }
 
-    override fun publishExactlyOnce(topic: CharSequence, persist: Boolean) = publishExactlyOnce(topic, null as? PlatformBuffer?)
+    override fun publishExactlyOnce(topic: CharSequence, persist: Boolean) =
+        publishExactlyOnce(topic, null as? PlatformBuffer?)
+
     override fun publishExactlyOnce(topic: CharSequence, payload: String?, persist: Boolean) =
         publishExactlyOnce(topic, payload?.toBuffer())
 
