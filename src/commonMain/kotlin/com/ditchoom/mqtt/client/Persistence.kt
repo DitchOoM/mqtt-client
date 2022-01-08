@@ -6,13 +6,15 @@ import com.ditchoom.mqtt.controlpacket.*
 import com.ditchoom.mqtt.controlpacket.format.fixed.DirectionOfFlow
 import kotlinx.atomicfu.AtomicInt
 import kotlinx.atomicfu.atomic
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flow
 
 interface Persistence {
     suspend fun getAllPendingIds(): Set<Int>
     suspend fun nextPacketIdentifier(persist: Boolean = true): Int
     suspend fun save(packetIdentifier: Int, data: ControlPacket)
     suspend fun delete(id: Int)
-    suspend fun readNextControlPacketOrNull(): Pair<Int, ControlPacket>?
+    suspend fun queuedControlPackets(): Flow<Pair<Int, ControlPacket>>
 }
 
 class InMemoryPersistence : Persistence {
@@ -40,15 +42,18 @@ class InMemoryPersistence : Persistence {
         queue.remove(id)
     }
 
-    override suspend fun readNextControlPacketOrNull(): Pair<Int, ControlPacket>? {
-        val firstKey = queue.keys.firstOrNull() ?: return null
-        val packet = queue[firstKey] ?: return null
-        return when (packet) {
-            is IPublishMessage -> packet.packetIdentifier?.let { Pair(it, packet) }
-            is ISubscribeRequest -> Pair(packet.packetIdentifier, packet)
-            is IUnsubscribeRequest -> Pair(packet.packetIdentifier, packet)
-            is IPublishRelease -> Pair(packet.packetIdentifier, packet)
-            else -> null
+    override suspend fun queuedControlPackets()= flow {
+        queue.forEach { (_, packet) ->
+            val item = when (packet) {
+                is IPublishMessage -> packet.packetIdentifier?.let { Pair(it, packet) }
+                is ISubscribeRequest -> Pair(packet.packetIdentifier, packet)
+                is IUnsubscribeRequest -> Pair(packet.packetIdentifier, packet)
+                is IPublishRelease -> Pair(packet.packetIdentifier, packet)
+                else -> null
+            }
+            if (item != null) {
+                emit(item)
+            }
         }
     }
 }

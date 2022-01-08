@@ -266,15 +266,12 @@ class MqttClient private constructor(
                 try {
                     // First dequeue all the queued packets that were not acknowledged
                     if (!connectionRequest.cleanStart) {
-                        var pair = persistence.readNextControlPacketOrNull()
-                        while (socketSession.isOpen() && pair != null) {
-                            val (packetId, packet) = pair
+                        persistence.queuedControlPackets().collect { (packetIdentifier, packet) ->
                             if (packet is FakeControlPacket) {
-                                persistence.delete(packetId)
+                                persistence.delete(packetIdentifier)
                             } else {
                                 socketSession.write(packet)
                             }
-                            pair = persistence.readNextControlPacketOrNull()
                         }
                     }
                     // Now write the other messages

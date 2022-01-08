@@ -65,8 +65,15 @@ kotlin {
             }
         }
 
+        val jvmMain by getting {
+            kotlin.srcDir("src/commonJvmMain/kotlin")
+        }
         val jvmTest by getting {
             kotlin.srcDir("src/commonJvmTest/kotlin")
+        }
+
+        val androidMain by getting {
+            kotlin.srcDir("src/commonJvmMain/kotlin")
         }
 
         val androidTest by getting {
