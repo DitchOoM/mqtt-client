@@ -264,7 +264,7 @@ class ReconnectingMqttClient private constructor(
             port: UShort,
             hostname: String = "localhost",
             useWebsockets: Boolean = false,
-        ): Pair<IMqttClient, CancelConnection> {
+        ): Pair<ReconnectingMqttClient, CancelConnection> {
             val scope = parentScope + CoroutineName("ReconnectingMqttClient $hostname:$port") + Job()
             val client = ReconnectingMqttClient(scope, connectionRequest, port, hostname, useWebsockets)
             val cancelConnection = CancelConnection(client)
