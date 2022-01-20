@@ -27,16 +27,15 @@ class ReconnectingMqttClientTest {
         val clientIdPrefix = if (useWebsockets) "testClientWS-" else "testClient-"
         val connectionRequest = ConnectionRequest(
             ConnectionRequest.VariableHeader(cleanSession = cleanSession, keepAliveSeconds = keepAliveSeconds),
-            payload = ConnectionRequest.Payload(clientId = MqttUtf8String("$clientIdPrefix${Random.nextInt()}"))
+            payload = ConnectionRequest.Payload(clientId = "$clientIdPrefix${Random.nextInt()}")
         )
         val port = if (useWebsockets) 80u else 1883u
-        @Suppress("UNCHECKED_CAST")
         return ReconnectingMqttClient.stayConnected(
             scope,
             connectionRequest,
             port.toUShort(),
             useWebsockets = useWebsockets
-        ) as Pair<ReconnectingMqttClient, CancelConnection>
+        )
     }
 
     @Test

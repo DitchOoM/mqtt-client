@@ -2,17 +2,14 @@
 
 package com.ditchoom.mqtt.client
 
-import com.ditchoom.buffer.PlatformBuffer
+import com.ditchoom.buffer.ParcelablePlatformBuffer
 import com.ditchoom.buffer.SuspendCloseable
 import com.ditchoom.data.Writer
 import com.ditchoom.mqtt.MqttException
 import com.ditchoom.mqtt.controlpacket.ControlPacket
 import com.ditchoom.mqtt.controlpacket.IConnectionAcknowledgment
 import com.ditchoom.mqtt.controlpacket.IConnectionRequest
-import com.ditchoom.socket.SocketController
-import com.ditchoom.socket.SocketOptions
-import com.ditchoom.socket.getClientSocket
-import com.ditchoom.socket.getWebSocketClient
+import com.ditchoom.socket.*
 import com.ditchoom.websocket.WebSocketConnectionOptions
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
@@ -22,9 +19,9 @@ import kotlin.time.TimeSource
 
 @ExperimentalTime
 class MqttSocketSession private constructor(
-    val connack: IConnectionAcknowledgment,
+    val connectionAcknowledgement: IConnectionAcknowledgment,
     private val timeout: Duration,
-    private val writer: Writer<PlatformBuffer>,
+    private val writer: Writer<ParcelablePlatformBuffer>,
     private val reader: BufferedControlPacketReader,
     private val socketController: SocketController,
 ) : SuspendCloseable {
@@ -40,9 +37,7 @@ class MqttSocketSession private constructor(
 
     suspend fun read() = reader.readControlPacket()
 
-    suspend fun awaitClose() {
-        socketController.awaitClose()
-    }
+    suspend fun awaitClose(): SocketException = socketController.awaitClose()
 
     override suspend fun close() {
         isClosed = true

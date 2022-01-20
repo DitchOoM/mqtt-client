@@ -4,7 +4,7 @@ import com.ditchoom.mqtt.controlpacket.ControlPacket
 import com.ditchoom.mqtt.controlpacket.ControlPacketFactory
 import com.ditchoom.mqtt.controlpacket.format.fixed.DirectionOfFlow
 
-
+@Parcelize
 object FakeControlPacket : ControlPacket {
     override val controlPacketFactory: ControlPacketFactory
         get() = throw UnsupportedOperationException()

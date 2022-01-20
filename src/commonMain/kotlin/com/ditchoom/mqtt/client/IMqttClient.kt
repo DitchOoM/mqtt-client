@@ -1,6 +1,6 @@
 package com.ditchoom.mqtt.client
 
-import com.ditchoom.buffer.PlatformBuffer
+import com.ditchoom.buffer.ParcelablePlatformBuffer
 import com.ditchoom.buffer.SuspendCloseable
 import com.ditchoom.mqtt.controlpacket.*
 import com.ditchoom.mqtt.topic.Filter
@@ -9,7 +9,7 @@ import kotlinx.coroutines.Deferred
 interface IMqttClient : SuspendCloseable {
     fun publishAtMostOnce(topic: CharSequence): Deferred<Unit>
     fun publishAtMostOnce(topic: CharSequence, payload: String? = null): Deferred<Unit>
-    fun publishAtMostOnce(topic: CharSequence, payload: PlatformBuffer? = null): Deferred<Unit>
+    fun publishAtMostOnce(topic: CharSequence, payload: ParcelablePlatformBuffer? = null): Deferred<Unit>
 
     fun publishAtLeastOnce(topic: CharSequence, persist: Boolean = true): Deferred<IPublishAcknowledgment>
     fun publishAtLeastOnce(
@@ -20,7 +20,7 @@ interface IMqttClient : SuspendCloseable {
 
     fun publishAtLeastOnce(
         topic: CharSequence,
-        payload: PlatformBuffer? = null,
+        payload: ParcelablePlatformBuffer? = null,
         persist: Boolean = true
     ): Deferred<IPublishAcknowledgment>
 
@@ -28,7 +28,7 @@ interface IMqttClient : SuspendCloseable {
     fun publishExactlyOnce(topic: CharSequence, payload: String? = null, persist: Boolean = true): Deferred<Unit>
     fun publishExactlyOnce(
         topic: CharSequence,
-        payload: PlatformBuffer? = null,
+        payload: ParcelablePlatformBuffer? = null,
         persist: Boolean = true
     ): Deferred<Unit>
 

@@ -2,13 +2,14 @@
 
 package com.ditchoom.mqtt.client
 
-import com.ditchoom.buffer.PlatformBuffer
+import com.ditchoom.buffer.ParcelablePlatformBuffer
 import com.ditchoom.buffer.toBuffer
 import com.ditchoom.mqtt.controlpacket.*
 import com.ditchoom.mqtt.controlpacket.ISubscription.RetainHandling
 import com.ditchoom.mqtt.controlpacket.QualityOfService.*
 import com.ditchoom.mqtt.topic.Filter
 import com.ditchoom.mqtt.topic.Node
+import com.ditchoom.socket.SocketException
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.*
@@ -33,6 +34,7 @@ class MqttClient private constructor(
     private val packetFactory = connectionRequest.controlPacketFactory
 
     internal val keepAliveJob = startKeepAliveTimer()
+    val connectionAcknowledgment = socketSession.connectionAcknowledgement
 
     init {
         scope.launch(CoroutineName("$this: Automatic Message Handler on $socketSession")) {
@@ -48,23 +50,23 @@ class MqttClient private constructor(
         }
     }
 
-    override fun publishAtMostOnce(topic: CharSequence) = publishAtMostOnce(topic, null as? PlatformBuffer?)
+    override fun publishAtMostOnce(topic: CharSequence) = publishAtMostOnce(topic, null as? ParcelablePlatformBuffer?)
     override fun publishAtMostOnce(topic: CharSequence, payload: String?) =
         publishAtMostOnce(topic, payload?.toBuffer())
 
-    override fun publishAtMostOnce(topic: CharSequence, payload: PlatformBuffer?) = scope.async {
+    override fun publishAtMostOnce(topic: CharSequence, payload: ParcelablePlatformBuffer?) = scope.async {
         sendOutgoing(packetFactory.publish(qos = AT_MOST_ONCE, topicName = topic, payload = payload))
     }
 
     override fun publishAtLeastOnce(topic: CharSequence, persist: Boolean) = publishAtLeastOnce(
         topic,
-        null as? PlatformBuffer?
+        null as? ParcelablePlatformBuffer?
     )
 
     override fun publishAtLeastOnce(topic: CharSequence, payload: String?, persist: Boolean) =
         publishAtLeastOnce(topic, payload?.toBuffer())
 
-    override fun publishAtLeastOnce(topic: CharSequence, payload: PlatformBuffer?, persist: Boolean) = scope.async {
+    override fun publishAtLeastOnce(topic: CharSequence, payload: ParcelablePlatformBuffer?, persist: Boolean) = scope.async {
         val packetIdentifier = persistence.nextPacketIdentifier()
         val packet = packetFactory.publish(
             qos = AT_LEAST_ONCE,
@@ -81,12 +83,12 @@ class MqttClient private constructor(
     }
 
     override fun publishExactlyOnce(topic: CharSequence, persist: Boolean) =
-        publishExactlyOnce(topic, null as? PlatformBuffer?)
+        publishExactlyOnce(topic, null as? ParcelablePlatformBuffer?)
 
     override fun publishExactlyOnce(topic: CharSequence, payload: String?, persist: Boolean) =
         publishExactlyOnce(topic, payload?.toBuffer())
 
-    override fun publishExactlyOnce(topic: CharSequence, payload: PlatformBuffer?, persist: Boolean) = scope.async {
+    override fun publishExactlyOnce(topic: CharSequence, payload: ParcelablePlatformBuffer?, persist: Boolean) = scope.async {
         val packetIdentifier = persistence.nextPacketIdentifier()
         val packet = packetFactory.publish(
             qos = EXACTLY_ONCE, topicName = topic, payload = payload, packetIdentifier = packetIdentifier
@@ -182,12 +184,14 @@ class MqttClient private constructor(
 
 
     override fun ping() = scope.async {
+        println("sending ping")
         sendOutgoing(packetFactory.pingRequest())
         pingRequestCount++
         incoming
             .filterIsInstance<IPingResponse>()
             .first()
             .also {
+                println("recv ping response")
                 pingResponseCount++
             }
     }
@@ -233,12 +237,15 @@ class MqttClient private constructor(
         }
     }
 
-    suspend fun waitUntilDisconnectAsync() {
-        socketSession.awaitClose()
-    }
+    suspend fun waitUntilDisconnectAsync(): SocketException = socketSession.awaitClose()
 
     @ExperimentalTime
     companion object {
+
+        sealed class ClientConnection {
+            class Connected(val client: MqttClient): ClientConnection()
+            class Exception(val throwable: Throwable): ClientConnection()
+        }
 
         fun connectOnce(
             scope: CoroutineScope,
@@ -247,11 +254,15 @@ class MqttClient private constructor(
             hostname: String = "localhost",
             useWebsockets: Boolean = false,
             persistence: Persistence,
-        ): Deferred<MqttClient> = scope.async(CoroutineName("$this: @$hostname:$port")) {
+        ): Deferred<ClientConnection> = scope.async(CoroutineName("$this: @$hostname:$port")) {
             val clientScope = scope + Job()
             val outgoing = Channel<ControlPacket>()
             val incoming = MutableSharedFlow<ControlPacket>()
-            val socketSession = MqttSocketSession.openConnection(connectionRequest, port, hostname, useWebsockets)
+            val socketSession = try {
+                MqttSocketSession.openConnection(connectionRequest, port, hostname, useWebsockets)
+            } catch (t: Throwable) {
+                return@async ClientConnection.Exception(t)
+            }
             val client = MqttClient(clientScope, socketSession, connectionRequest, outgoing, incoming, persistence)
             clientScope.launch(CoroutineName("$this: Reading $socketSession @ $hostname:$port")) {
                 try {
@@ -287,7 +298,7 @@ class MqttClient private constructor(
                     // ignore
                 }
             }
-            client
+            ClientConnection.Connected(client)
         }
     }
 }
