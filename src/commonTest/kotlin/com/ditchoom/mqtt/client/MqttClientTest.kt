@@ -2,7 +2,6 @@ package com.ditchoom.mqtt.client
 
 import block
 import com.ditchoom.mqtt.controlpacket.IPingResponse
-import com.ditchoom.mqtt.controlpacket.MqttUtf8String
 import com.ditchoom.mqtt.controlpacket.format.ReasonCode
 import com.ditchoom.mqtt3.controlpacket.ConnectionRequest
 import com.ditchoom.mqtt3.controlpacket.SubscribeAcknowledgement
@@ -26,13 +25,14 @@ class MqttClientTest {
             payload = ConnectionRequest.Payload(clientId = clientId)
         )
         val port = if (useWebsockets) 80u else 1883u
-        return MqttClient.connectOnce(
+        return (MqttClient.connectOnce(
             scope,
             connectionRequest,
             port.toUShort(),
             useWebsockets = useWebsockets,
-            persistence = InMemoryPersistence()
-        ).await()
+            persistence = InMemoryPersistence(),
+            connectTimeout = 1.5.seconds
+        ).await() as MqttClient.Companion.ClientConnection.Connected).client
     }
 
     @Test
@@ -73,8 +73,8 @@ class MqttClientTest {
         val client = prepareConnection(this)
         val expectedPingResponseCount = 1L
         delay(client.connectionRequest.keepAliveTimeoutSeconds.toInt().seconds * 1.5)
-        disconnect(client)
         assertEquals(expectedPingResponseCount, client.pingResponseCount)
+        disconnect(client)
     }
 
 
@@ -83,8 +83,8 @@ class MqttClientTest {
         val client = prepareConnection(this, true)
         val expectedPingResponseCount = 1L
         delay(client.connectionRequest.keepAliveTimeoutSeconds.toInt().seconds * 1.5)
-        disconnect(client)
         assertEquals(expectedPingResponseCount, client.pingResponseCount)
+        disconnect(client)
     }
 
     @Test

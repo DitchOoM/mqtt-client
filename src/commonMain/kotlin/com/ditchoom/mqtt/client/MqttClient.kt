@@ -13,6 +13,7 @@ import com.ditchoom.socket.SocketException
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.*
+import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.ExperimentalTime
 
@@ -30,7 +31,7 @@ class MqttClient private constructor(
     var pingResponseCount = 0L
         private set
 
-    private val keepAliveDuration = connectionRequest.keepAliveTimeoutSeconds.toInt().seconds
+    private val keepAliveDuration = connectionRequest.keepAliveTimeoutSeconds.toDouble().seconds
     private val packetFactory = connectionRequest.controlPacketFactory
 
     internal val keepAliveJob = startKeepAliveTimer()
@@ -184,14 +185,12 @@ class MqttClient private constructor(
 
 
     override fun ping() = scope.async {
-        println("sending ping")
         sendOutgoing(packetFactory.pingRequest())
         pingRequestCount++
         incoming
             .filterIsInstance<IPingResponse>()
             .first()
             .also {
-                println("recv ping response")
                 pingResponseCount++
             }
     }
@@ -230,6 +229,7 @@ class MqttClient private constructor(
     override suspend fun close() {
         if (socketSession.isOpen()) {
             try {
+                keepAliveJob.cancel()
                 socketSession.write(packetFactory.disconnect())
             } catch (e: Exception) {
             }
@@ -254,12 +254,13 @@ class MqttClient private constructor(
             hostname: String = "localhost",
             useWebsockets: Boolean = false,
             persistence: Persistence,
+            connectTimeout: Duration,
         ): Deferred<ClientConnection> = scope.async(CoroutineName("$this: @$hostname:$port")) {
             val clientScope = scope + Job()
             val outgoing = Channel<ControlPacket>()
             val incoming = MutableSharedFlow<ControlPacket>()
             val socketSession = try {
-                MqttSocketSession.openConnection(connectionRequest, port, hostname, useWebsockets)
+                MqttSocketSession.openConnection(connectionRequest, port, hostname, useWebsockets, connectTimeout)
             } catch (t: Throwable) {
                 return@async ClientConnection.Exception(t)
             }

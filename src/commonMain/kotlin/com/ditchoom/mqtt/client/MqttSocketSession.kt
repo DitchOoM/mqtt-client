@@ -50,7 +50,7 @@ class MqttSocketSession private constructor(
             port: UShort,
             hostname: String = "localhost",
             useWebsockets: Boolean = false,
-            socketTimeout: Duration = (connectionRequest.keepAliveTimeoutSeconds.toDouble() * 1.5).seconds,
+            socketTimeout: Duration = connectionRequest.keepAliveTimeoutSeconds.toInt().seconds * 1.5,
             socketOptions: SocketOptions? = null,
         ): MqttSocketSession {
             val socket = if (useWebsockets) {
