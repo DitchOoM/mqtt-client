@@ -7,11 +7,13 @@ import com.ditchoom.mqtt.controlpacket.QualityOfService.*
 import com.ditchoom.mqtt.controlpacket.format.ReasonCode
 import com.ditchoom.mqtt.topic.Filter
 import com.ditchoom.mqtt.topic.Node
-import kotlinx.atomicfu.atomic
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.filterIsInstance
+import kotlinx.coroutines.flow.first
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
@@ -44,6 +46,7 @@ class ReconnectingMqttClient private constructor(
     override fun toString(): String {
         return "ReconnectingClient(${connectionRequest.protocolName}:${connectionRequest.protocolVersion}) - ${connectionRequest.clientIdentifier}@$hostname:$port isConnected:${isConnected()}"
     }
+
     fun isConnected() = currentClient?.socketSession?.isOpen() ?: false
 
     val stayConnectedJob = scope.launch(CoroutineName("$this: Stay connected, reconnect if needed")) {
@@ -59,7 +62,7 @@ class ReconnectingMqttClient private constructor(
             var hadError = false
             try {
                 connect(this)
-            } catch (_ : CancellationException) {
+            } catch (_: CancellationException) {
                 return@launch
             } catch (t: Throwable) {
                 t.printStackTrace()
@@ -70,7 +73,8 @@ class ReconnectingMqttClient private constructor(
                     delay(keepAliveDelay(reconnectionCount.toLong()))
                 } else if (reconnectionCount > 1uL) {
                     delay(currentDelay)
-                    currentDelay = (currentDelay.inWholeMilliseconds * factor).coerceAtMost(maxDelay.toDouble(DurationUnit.MILLISECONDS)).milliseconds
+                    currentDelay =
+                        (currentDelay.inWholeMilliseconds * factor).coerceAtMost(maxDelay.toDouble(DurationUnit.MILLISECONDS)).milliseconds
                 }
             }
         }
@@ -78,7 +82,8 @@ class ReconnectingMqttClient private constructor(
 
     private suspend fun connect(scope: CoroutineScope) {
         val clientConnection =
-            MqttClient.connectOnce(scope, connectionRequest, port, hostname, useWebsockets, persistence, connectTimeout).await()
+            MqttClient.connectOnce(scope, connectionRequest, port, hostname, useWebsockets, persistence, connectTimeout)
+                .await()
         if (clientConnection is MqttClient.Companion.ClientConnection.Exception) {
             throw clientConnection.throwable
         }
@@ -126,13 +131,16 @@ class ReconnectingMqttClient private constructor(
         }
     }
 
-    suspend fun sendDisconnect(reasonCode: ReasonCode = ReasonCode.NORMAL_DISCONNECTION,
-                               sessionExpiryIntervalSeconds: Long? = null,
-                               reasonString: CharSequence? = null,
-                               userProperty: List<Pair<CharSequence, CharSequence>> = emptyList(),) {
+    suspend fun sendDisconnect(
+        reasonCode: ReasonCode = ReasonCode.NORMAL_DISCONNECTION,
+        sessionExpiryIntervalSeconds: Long? = null,
+        reasonString: CharSequence? = null,
+        userProperty: List<Pair<CharSequence, CharSequence>> = emptyList(),
+    ) {
         val client = currentClient ?: return
         client.sendOutgoing(
-            factory.disconnect(reasonCode, sessionExpiryIntervalSeconds, reasonString, userProperty))
+            factory.disconnect(reasonCode, sessionExpiryIntervalSeconds, reasonString, userProperty)
+        )
         client.keepAliveJob.cancel()
         client.socketSession.close()
     }
@@ -159,14 +167,15 @@ class ReconnectingMqttClient private constructor(
     override fun publishAtLeastOnce(topic: CharSequence, payload: String?, persist: Boolean) =
         publishAtLeastOnce(topic, payload?.toBuffer())
 
-    override fun publishAtLeastOnce(topic: CharSequence, payload: ParcelablePlatformBuffer?, persist: Boolean) = scope.async {
-        val packetId = sendMessageAndAwait(persist) { packetId ->
-            factory.publish(qos = AT_LEAST_ONCE, topicName = topic, payload = payload, packetIdentifier = packetId)
-        }.first
-        incoming
-            .filterIsInstance<IPublishAcknowledgment>()
-            .first { it.packetIdentifier == packetId }
-    }
+    override fun publishAtLeastOnce(topic: CharSequence, payload: ParcelablePlatformBuffer?, persist: Boolean) =
+        scope.async {
+            val packetId = sendMessageAndAwait(persist) { packetId ->
+                factory.publish(qos = AT_LEAST_ONCE, topicName = topic, payload = payload, packetIdentifier = packetId)
+            }.first
+            incoming
+                .filterIsInstance<IPublishAcknowledgment>()
+                .first { it.packetIdentifier == packetId }
+        }
 
     private suspend fun sendMessageAndAwait(
         persist: Boolean,
@@ -189,20 +198,21 @@ class ReconnectingMqttClient private constructor(
     override fun publishExactlyOnce(topic: CharSequence, payload: String?, persist: Boolean) =
         publishExactlyOnce(topic, payload?.toBuffer())
 
-    override fun publishExactlyOnce(topic: CharSequence, payload: ParcelablePlatformBuffer?, persist: Boolean) = scope.async {
-        val packetId = sendMessageAndAwait(persist) { packetId ->
-            factory.publish(
-                qos = EXACTLY_ONCE,
-                topicName = topic,
-                payload = payload,
-                packetIdentifier = packetId
-            )
-        }.first
-        val publishReceived = incoming
-            .filterIsInstance<IPublishReceived>()
-            .first { it.packetIdentifier == packetId }
-        publishExactlyOnceInternalStep2(publishReceived)
-    }
+    override fun publishExactlyOnce(topic: CharSequence, payload: ParcelablePlatformBuffer?, persist: Boolean) =
+        scope.async {
+            val packetId = sendMessageAndAwait(persist) { packetId ->
+                factory.publish(
+                    qos = EXACTLY_ONCE,
+                    topicName = topic,
+                    payload = payload,
+                    packetIdentifier = packetId
+                )
+            }.first
+            val publishReceived = incoming
+                .filterIsInstance<IPublishReceived>()
+                .first { it.packetIdentifier == packetId }
+            publishExactlyOnceInternalStep2(publishReceived)
+        }
 
     private suspend fun publishExactlyOnceInternalStep2(publishReceived: IPublishReceived) {
         val response = publishReceived.expectedResponse()
@@ -306,10 +316,18 @@ class ReconnectingMqttClient private constructor(
             hostname: String = "localhost",
             useWebsockets: Boolean = false,
             connectTimeout: Duration = 30.seconds,
-            keepAliveDelay: (Long) -> Duration = {1.seconds},
+            keepAliveDelay: (Long) -> Duration = { 1.seconds },
         ): Pair<ReconnectingMqttClient, CancelConnection> {
             val scope = parentScope + CoroutineName("ReconnectingMqttClient $hostname:$port") + Job()
-            val client = ReconnectingMqttClient(scope, connectionRequest, port, hostname, useWebsockets, keepAliveDelay = keepAliveDelay, connectTimeout = connectTimeout)
+            val client = ReconnectingMqttClient(
+                scope,
+                connectionRequest,
+                port,
+                hostname,
+                useWebsockets,
+                keepAliveDelay = keepAliveDelay,
+                connectTimeout = connectTimeout
+            )
             val cancelConnection = CancelConnection(client)
             return Pair(client, cancelConnection)
         }

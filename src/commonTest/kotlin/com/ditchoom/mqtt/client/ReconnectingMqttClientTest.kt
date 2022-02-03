@@ -22,8 +22,8 @@ class ReconnectingMqttClientTest {
         scope: CoroutineScope,
         useWebsockets: Boolean = false,
         cleanSession: Boolean = true,
-        hostname :String = "localhost",
-        port:Int? = null
+        hostname: String = "localhost",
+        port: Int? = null
     ): Pair<ReconnectingMqttClient, CancelConnection> {
         val clientIdPrefix = if (useWebsockets) "testClientWS-" else "testClient-"
         val connectionRequest = ConnectionRequest(
@@ -43,7 +43,13 @@ class ReconnectingMqttClientTest {
 
     @Test
     fun connectTimeoutWorks() = block {
-        val (client, cancellation) = prepareConnection(this, useWebsockets = false, cleanSession = false, hostname = "example.com", port = 3)
+        val (client, cancellation) = prepareConnection(
+            this,
+            useWebsockets = false,
+            cleanSession = false,
+            hostname = "example.com",
+            port = 3
+        )
         delay(600.milliseconds)
         assertTrue(client.reconnectionCount > 0uL)
         client.stayConnectedJob.cancel()
@@ -62,7 +68,11 @@ class ReconnectingMqttClientTest {
         messageDequeSuspend(this, client, cancellation)
     }
 
-    suspend fun messageDequeSuspend(scope: CoroutineScope, client: ReconnectingMqttClient, cancellation: CancelConnection) {
+    suspend fun messageDequeSuspend(
+        scope: CoroutineScope,
+        client: ReconnectingMqttClient,
+        cancellation: CancelConnection
+    ) {
         client.maxReconnectionCount = 1uL
         // cancel the keep alive timer. the server will disconnect the client if it exceeds 1.5x the keep alive timer
         cancellation.ignoreKeepAlive()
@@ -76,7 +86,7 @@ class ReconnectingMqttClientTest {
         client.awaitClientConnection()
         assertNotNull(pubAsync.await())
         // We should have atleast reconnected once by now
-        assertTrue(client.reconnectionCount > 0uL )
+        assertTrue(client.reconnectionCount > 0uL)
     }
 
 

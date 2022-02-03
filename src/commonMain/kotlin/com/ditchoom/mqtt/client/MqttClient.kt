@@ -67,21 +67,22 @@ class MqttClient private constructor(
     override fun publishAtLeastOnce(topic: CharSequence, payload: String?, persist: Boolean) =
         publishAtLeastOnce(topic, payload?.toBuffer())
 
-    override fun publishAtLeastOnce(topic: CharSequence, payload: ParcelablePlatformBuffer?, persist: Boolean) = scope.async {
-        val packetIdentifier = persistence.nextPacketIdentifier()
-        val packet = packetFactory.publish(
-            qos = AT_LEAST_ONCE,
-            topicName = topic,
-            payload = payload,
-            packetIdentifier = packetIdentifier
-        )
-        persistence.save(packetIdentifier, packet)
-        sendOutgoing(packet)
-        return@async incoming
-            .filterIsInstance<IPublishAcknowledgment>()
-            .filter { it.packetIdentifier == packetIdentifier }
-            .first()
-    }
+    override fun publishAtLeastOnce(topic: CharSequence, payload: ParcelablePlatformBuffer?, persist: Boolean) =
+        scope.async {
+            val packetIdentifier = persistence.nextPacketIdentifier()
+            val packet = packetFactory.publish(
+                qos = AT_LEAST_ONCE,
+                topicName = topic,
+                payload = payload,
+                packetIdentifier = packetIdentifier
+            )
+            persistence.save(packetIdentifier, packet)
+            sendOutgoing(packet)
+            return@async incoming
+                .filterIsInstance<IPublishAcknowledgment>()
+                .filter { it.packetIdentifier == packetIdentifier }
+                .first()
+        }
 
     override fun publishExactlyOnce(topic: CharSequence, persist: Boolean) =
         publishExactlyOnce(topic, null as? ParcelablePlatformBuffer?)
@@ -89,19 +90,20 @@ class MqttClient private constructor(
     override fun publishExactlyOnce(topic: CharSequence, payload: String?, persist: Boolean) =
         publishExactlyOnce(topic, payload?.toBuffer())
 
-    override fun publishExactlyOnce(topic: CharSequence, payload: ParcelablePlatformBuffer?, persist: Boolean) = scope.async {
-        val packetIdentifier = persistence.nextPacketIdentifier()
-        val packet = packetFactory.publish(
-            qos = EXACTLY_ONCE, topicName = topic, payload = payload, packetIdentifier = packetIdentifier
-        )
-        persistence.save(packetIdentifier, packet)
-        sendOutgoing(packet)
-        val publishReceived = incoming
-            .filterIsInstance<IPublishReceived>()
-            .filter { it.packetIdentifier == packetIdentifier }
-            .first()
-        publishExactlyOnceInternalStep2(publishReceived)
-    }
+    override fun publishExactlyOnce(topic: CharSequence, payload: ParcelablePlatformBuffer?, persist: Boolean) =
+        scope.async {
+            val packetIdentifier = persistence.nextPacketIdentifier()
+            val packet = packetFactory.publish(
+                qos = EXACTLY_ONCE, topicName = topic, payload = payload, packetIdentifier = packetIdentifier
+            )
+            persistence.save(packetIdentifier, packet)
+            sendOutgoing(packet)
+            val publishReceived = incoming
+                .filterIsInstance<IPublishReceived>()
+                .filter { it.packetIdentifier == packetIdentifier }
+                .first()
+            publishExactlyOnceInternalStep2(publishReceived)
+        }
 
     private suspend fun publishExactlyOnceInternalStep2(publishReceived: IPublishReceived) {
         val response = publishReceived.expectedResponse()
@@ -243,8 +245,8 @@ class MqttClient private constructor(
     companion object {
 
         sealed class ClientConnection {
-            class Connected(val client: MqttClient): ClientConnection()
-            class Exception(val throwable: Throwable): ClientConnection()
+            class Connected(val client: MqttClient) : ClientConnection()
+            class Exception(val throwable: Throwable) : ClientConnection()
         }
 
         fun connectOnce(

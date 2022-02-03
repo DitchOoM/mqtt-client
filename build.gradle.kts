@@ -29,14 +29,14 @@ kotlin {
         }
     }
     js {
-        nodejs{
+        nodejs {
             testTask {
                 useMocha {
                     timeout = "30s"
                 }
             }
         }
-        browser{
+        browser {
             testTask {
                 useKarma {
                     useChromeHeadless()
@@ -99,7 +99,7 @@ android {
     }
     lintOptions {
         isQuiet = true
-        isAbortOnError =  false
+        isAbortOnError = false
     }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_1_8
