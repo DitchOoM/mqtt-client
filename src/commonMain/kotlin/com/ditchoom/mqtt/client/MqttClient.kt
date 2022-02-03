@@ -262,7 +262,7 @@ class MqttClient private constructor(
             val outgoing = Channel<ControlPacket>()
             val incoming = MutableSharedFlow<ControlPacket>()
             val socketSession = try {
-                MqttSocketSession.openConnection(connectionRequest, port, hostname, useWebsockets, connectTimeout)
+                MqttSocketSession.openConnection(connectionRequest, port, hostname, useWebsockets, connectionRequest.keepAliveTimeoutSeconds.toInt().seconds * 1.5)
             } catch (t: Throwable) {
                 return@async ClientConnection.Exception(t)
             }
