@@ -190,7 +190,7 @@ class ReconnectingMqttClient private constructor(
         return Pair(packetId, packet)
     }
 
-    override fun publishExactlyOnce(topic: CharSequence, persist: Boolean): Deferred<Unit> {
+    override fun publishExactlyOnce(topic: CharSequence, persist: Boolean): DeferredPublishExactlyOnceResponse {
         val nullBuffer: ParcelablePlatformBuffer? = null
         return publishExactlyOnce(topic, nullBuffer)
     }
@@ -198,30 +198,30 @@ class ReconnectingMqttClient private constructor(
     override fun publishExactlyOnce(topic: CharSequence, payload: String?, persist: Boolean) =
         publishExactlyOnce(topic, payload?.toBuffer())
 
-    override fun publishExactlyOnce(topic: CharSequence, payload: ParcelablePlatformBuffer?, persist: Boolean) =
-        scope.async {
-            val packetId = sendMessageAndAwait(persist) { packetId ->
-                factory.publish(
-                    qos = EXACTLY_ONCE,
-                    topicName = topic,
-                    payload = payload,
-                    packetIdentifier = packetId
-                )
-            }.first
-            val publishReceived = incoming
-                .filterIsInstance<IPublishReceived>()
-                .first { it.packetIdentifier == packetId }
-            publishExactlyOnceInternalStep2(publishReceived)
-        }
 
-    private suspend fun publishExactlyOnceInternalStep2(publishReceived: IPublishReceived) {
-        val response = publishReceived.expectedResponse()
-        persistence.save(response.packetIdentifier, response)
-        outgoingQueue.send(response)
-        incoming
-            .filterIsInstance<IPublishComplete>()
-            .first { it.packetIdentifier == publishReceived.packetIdentifier }
-            .also { persistence.delete(it.packetIdentifier) }
+    override fun publishExactlyOnce(topic: CharSequence, payload: ParcelablePlatformBuffer?, persist: Boolean): DeferredPublishExactlyOnceResponse {
+
+            val publishReceivedDeferred = scope.async {
+                val packetId = sendMessageAndAwait(persist) { packetId ->
+                    factory.publish(
+                        qos = EXACTLY_ONCE,
+                        topicName = topic,
+                        payload = payload,
+                        packetIdentifier = packetId
+                    )
+                }.first
+                incoming
+                    .filterIsInstance<IPublishReceived>()
+                    .first { it.packetIdentifier == packetId }
+            }
+            val publishComplete = scope.async {
+                val publishReceived = publishReceivedDeferred.await()
+                incoming
+                    .filterIsInstance<IPublishComplete>()
+                    .first { it.packetIdentifier == publishReceived.packetIdentifier }
+                    .also { persistence.delete(it.packetIdentifier) }
+            }
+            return DeferredPublishExactlyOnceResponse(publishReceivedDeferred, publishComplete)
     }
 
     override fun subscribe(

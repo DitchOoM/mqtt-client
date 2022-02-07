@@ -24,13 +24,13 @@ interface IMqttClient : SuspendCloseable {
         persist: Boolean = true
     ): Deferred<IPublishAcknowledgment>
 
-    fun publishExactlyOnce(topic: CharSequence, persist: Boolean = true): Deferred<Unit>
-    fun publishExactlyOnce(topic: CharSequence, payload: String? = null, persist: Boolean = true): Deferred<Unit>
+    fun publishExactlyOnce(topic: CharSequence, persist: Boolean = true): DeferredPublishExactlyOnceResponse
+    fun publishExactlyOnce(topic: CharSequence, payload: String? = null, persist: Boolean = true): DeferredPublishExactlyOnceResponse
     fun publishExactlyOnce(
         topic: CharSequence,
         payload: ParcelablePlatformBuffer? = null,
         persist: Boolean = true
-    ): Deferred<Unit>
+    ): DeferredPublishExactlyOnceResponse
 
     fun subscribe(
         topicFilter: CharSequence,

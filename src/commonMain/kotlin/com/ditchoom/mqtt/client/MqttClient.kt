@@ -90,8 +90,8 @@ class MqttClient private constructor(
     override fun publishExactlyOnce(topic: CharSequence, payload: String?, persist: Boolean) =
         publishExactlyOnce(topic, payload?.toBuffer())
 
-    override fun publishExactlyOnce(topic: CharSequence, payload: ParcelablePlatformBuffer?, persist: Boolean) =
-        scope.async {
+    override fun publishExactlyOnce(topic: CharSequence, payload: ParcelablePlatformBuffer?, persist: Boolean) : DeferredPublishExactlyOnceResponse {
+        val publishReceivedDeferred = scope.async {
             val packetIdentifier = persistence.nextPacketIdentifier()
             val packet = packetFactory.publish(
                 qos = EXACTLY_ONCE, topicName = topic, payload = payload, packetIdentifier = packetIdentifier
@@ -102,17 +102,19 @@ class MqttClient private constructor(
                 .filterIsInstance<IPublishReceived>()
                 .filter { it.packetIdentifier == packetIdentifier }
                 .first()
-            publishExactlyOnceInternalStep2(publishReceived)
+            publishReceived
         }
+        val pubCompDeferred = scope.async { publishExactlyOnceInternalStep2(publishReceivedDeferred.await()) }
+        return DeferredPublishExactlyOnceResponse(publishReceivedDeferred, pubCompDeferred)
+    }
 
-    private suspend fun publishExactlyOnceInternalStep2(publishReceived: IPublishReceived) {
+    private suspend fun publishExactlyOnceInternalStep2(publishReceived: IPublishReceived): IPublishComplete {
         val response = publishReceived.expectedResponse()
         persistence.save(response.packetIdentifier, response)
         sendOutgoing(response)
-        incoming
+        return incoming
             .filterIsInstance<IPublishComplete>()
-            .filter { it.packetIdentifier == publishReceived.packetIdentifier }
-            .first()
+            .first { it.packetIdentifier == publishReceived.packetIdentifier }
         //.also { persistence.delete(it.packetIdentifier) }
     }
 
