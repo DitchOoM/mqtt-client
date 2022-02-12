@@ -51,32 +51,33 @@ class MqttClient private constructor(
         }
     }
 
-    override fun publishAtMostOnce(topic: CharSequence) = publishAtMostOnce(topic, null as? ParcelablePlatformBuffer?)
-    override fun publishAtMostOnce(topic: CharSequence, payload: String?) =
-        publishAtMostOnce(topic, payload?.toBuffer())
+    override fun publishAtMostOnce(topic: CharSequence, retain: Boolean) = publishAtMostOnce(topic, retain, null as? ParcelablePlatformBuffer?)
+    override fun publishAtMostOnce(topic: CharSequence, retain: Boolean, payload: String?) =
+        publishAtMostOnce(topic,retain, payload?.toBuffer())
 
-    override fun publishAtMostOnce(topic: CharSequence, payload: ParcelablePlatformBuffer?) = scope.async {
-        sendOutgoing(packetFactory.publish(qos = AT_MOST_ONCE, topicName = topic, payload = payload))
+    override fun publishAtMostOnce(topic: CharSequence, retain: Boolean, payload: ParcelablePlatformBuffer?) = scope.async {
+        sendOutgoing(packetFactory.publish(qos = AT_MOST_ONCE, retain = retain, topicName = topic, payload = payload))
     }
 
-    override fun publishAtLeastOnce(topic: CharSequence, persist: Boolean) = publishAtLeastOnce(
-        topic,
-        null as? ParcelablePlatformBuffer?
-    )
+    override fun publishAtLeastOnce(topic: CharSequence, retain: Boolean, persist: Boolean) = publishAtLeastOnce(
+        topic, retain, null as? ParcelablePlatformBuffer?)
 
-    override fun publishAtLeastOnce(topic: CharSequence, payload: String?, persist: Boolean) =
-        publishAtLeastOnce(topic, payload?.toBuffer())
+    override fun publishAtLeastOnce(topic: CharSequence, retain: Boolean, payload: String?, persist: Boolean) =
+        publishAtLeastOnce(topic, retain, payload?.toBuffer())
 
-    override fun publishAtLeastOnce(topic: CharSequence, payload: ParcelablePlatformBuffer?, persist: Boolean) =
+    override fun publishAtLeastOnce(topic: CharSequence, retain: Boolean, payload: ParcelablePlatformBuffer?, persist: Boolean) =
         scope.async {
             val packetIdentifier = persistence.nextPacketIdentifier()
             val packet = packetFactory.publish(
                 qos = AT_LEAST_ONCE,
+                retain = retain,
                 topicName = topic,
                 payload = payload,
                 packetIdentifier = packetIdentifier
             )
-            persistence.save(packetIdentifier, packet)
+            if (persist) {
+                persistence.save(packetIdentifier, packet)
+            }
             sendOutgoing(packet)
             return@async incoming
                 .filterIsInstance<IPublishAcknowledgment>()
@@ -84,19 +85,21 @@ class MqttClient private constructor(
                 .first()
         }
 
-    override fun publishExactlyOnce(topic: CharSequence, persist: Boolean) =
-        publishExactlyOnce(topic, null as? ParcelablePlatformBuffer?)
+    override fun publishExactlyOnce(topic: CharSequence, retain: Boolean, persist: Boolean) =
+        publishExactlyOnce(topic, retain, null as? ParcelablePlatformBuffer?)
 
-    override fun publishExactlyOnce(topic: CharSequence, payload: String?, persist: Boolean) =
-        publishExactlyOnce(topic, payload?.toBuffer())
+    override fun publishExactlyOnce(topic: CharSequence, retain: Boolean, payload: String?, persist: Boolean) =
+        publishExactlyOnce(topic, retain, payload?.toBuffer())
 
-    override fun publishExactlyOnce(topic: CharSequence, payload: ParcelablePlatformBuffer?, persist: Boolean) : DeferredPublishExactlyOnceResponse {
+    override fun publishExactlyOnce(topic: CharSequence, retain: Boolean, payload: ParcelablePlatformBuffer?, persist: Boolean) : DeferredPublishExactlyOnceResponse {
         val publishReceivedDeferred = scope.async {
             val packetIdentifier = persistence.nextPacketIdentifier()
             val packet = packetFactory.publish(
-                qos = EXACTLY_ONCE, topicName = topic, payload = payload, packetIdentifier = packetIdentifier
+                qos = EXACTLY_ONCE, retain = retain, topicName = topic, payload = payload, packetIdentifier = packetIdentifier
             )
-            persistence.save(packetIdentifier, packet)
+            if (persist) {
+                persistence.save(packetIdentifier, packet)
+            }
             sendOutgoing(packet)
             val publishReceived = incoming
                 .filterIsInstance<IPublishReceived>()
@@ -140,7 +143,9 @@ class MqttClient private constructor(
             serverReference,
             userProperty
         )
-        persistence.save(packetIdentifier, sub)
+        if (persist) {
+            persistence.save(packetIdentifier, sub)
+        }
         sendOutgoing(sub)
         val subscribeAcknowledgment = incoming
             .filterIsInstance<ISubscribeAcknowledgement>()
@@ -165,7 +170,9 @@ class MqttClient private constructor(
     ) = scope.async {
         val packetIdentifier = persistence.nextPacketIdentifier()
         val unsub = packetFactory.unsubscribe(packetIdentifier, topics, userProperty)
-        persistence.save(packetIdentifier, unsub)
+        if (persist) {
+            persistence.save(packetIdentifier, unsub)
+        }
         sendOutgoing(unsub)
         val unsuback = incoming
             .filterIsInstance<IUnsubscribeAcknowledgment>()
@@ -289,7 +296,11 @@ class MqttClient private constructor(
                             if (packet is FakeControlPacket) {
                                 persistence.delete(packetIdentifier)
                             } else {
-                                socketSession.write(packet)
+                                if (packet is IPublishMessage) {
+                                    socketSession.write(packet.setDupFlagNewPubMessage())
+                                } else {
+                                    socketSession.write(packet)
+                                }
                             }
                         }
                     }

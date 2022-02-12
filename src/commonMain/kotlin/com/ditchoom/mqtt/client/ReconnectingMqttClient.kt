@@ -162,30 +162,30 @@ class ReconnectingMqttClient private constructor(
 
     suspend fun awaitClientConnection() = this.currentClient ?: connectedFlow.first()
 
-    override fun publishAtMostOnce(topic: CharSequence): Deferred<Unit> {
+    override fun publishAtMostOnce(topic: CharSequence, retain: Boolean): Deferred<Unit> {
         val nullBuffer: ParcelablePlatformBuffer? = null
-        return publishAtMostOnce(topic, nullBuffer)
+        return publishAtMostOnce(topic, retain, nullBuffer)
     }
 
-    override fun publishAtMostOnce(topic: CharSequence, payload: String?) =
-        publishAtMostOnce(topic, payload?.toBuffer())
+    override fun publishAtMostOnce(topic: CharSequence, retain: Boolean, payload: String?) =
+        publishAtMostOnce(topic, retain, payload?.toBuffer())
 
-    override fun publishAtMostOnce(topic: CharSequence, payload: ParcelablePlatformBuffer?) = scope.async {
-        outgoingQueue.send(factory.publish(qos = AT_MOST_ONCE, topicName = topic, payload = payload))
+    override fun publishAtMostOnce(topic: CharSequence, retain: Boolean, payload: ParcelablePlatformBuffer?) = scope.async {
+        outgoingQueue.send(factory.publish(qos = AT_MOST_ONCE, retain = retain, topicName = topic, payload = payload))
     }
 
-    override fun publishAtLeastOnce(topic: CharSequence, persist: Boolean): Deferred<IPublishAcknowledgment> {
+    override fun publishAtLeastOnce(topic: CharSequence, retain: Boolean, persist: Boolean): Deferred<IPublishAcknowledgment> {
         val nullBuffer: ParcelablePlatformBuffer? = null
-        return publishAtLeastOnce(topic, nullBuffer)
+        return publishAtLeastOnce(topic, retain, nullBuffer)
     }
 
-    override fun publishAtLeastOnce(topic: CharSequence, payload: String?, persist: Boolean) =
-        publishAtLeastOnce(topic, payload?.toBuffer())
+    override fun publishAtLeastOnce(topic: CharSequence, retain: Boolean, payload: String?, persist: Boolean) =
+        publishAtLeastOnce(topic, retain, payload?.toBuffer())
 
-    override fun publishAtLeastOnce(topic: CharSequence, payload: ParcelablePlatformBuffer?, persist: Boolean) =
+    override fun publishAtLeastOnce(topic: CharSequence, retain: Boolean, payload: ParcelablePlatformBuffer?, persist: Boolean) =
         scope.async {
             val packetId = sendMessageAndAwait(persist) { packetId ->
-                factory.publish(qos = AT_LEAST_ONCE, topicName = topic, payload = payload, packetIdentifier = packetId)
+                factory.publish(qos = AT_LEAST_ONCE, retain = retain, topicName = topic, payload = payload, packetIdentifier = packetId)
             }.first
             incoming
                 .filterIsInstance<IPublishAcknowledgment>()
@@ -205,21 +205,22 @@ class ReconnectingMqttClient private constructor(
         return Pair(packetId, packet)
     }
 
-    override fun publishExactlyOnce(topic: CharSequence, persist: Boolean): DeferredPublishExactlyOnceResponse {
+    override fun publishExactlyOnce(topic: CharSequence, retain: Boolean, persist: Boolean): DeferredPublishExactlyOnceResponse {
         val nullBuffer: ParcelablePlatformBuffer? = null
-        return publishExactlyOnce(topic, nullBuffer)
+        return publishExactlyOnce(topic, retain, nullBuffer)
     }
 
-    override fun publishExactlyOnce(topic: CharSequence, payload: String?, persist: Boolean) =
-        publishExactlyOnce(topic, payload?.toBuffer())
+    override fun publishExactlyOnce(topic: CharSequence, retain: Boolean, payload: String?, persist: Boolean) =
+        publishExactlyOnce(topic, retain, payload?.toBuffer())
 
 
-    override fun publishExactlyOnce(topic: CharSequence, payload: ParcelablePlatformBuffer?, persist: Boolean): DeferredPublishExactlyOnceResponse {
+    override fun publishExactlyOnce(topic: CharSequence, retain: Boolean, payload: ParcelablePlatformBuffer?, persist: Boolean): DeferredPublishExactlyOnceResponse {
 
             val publishReceivedDeferred = scope.async {
                 val packetId = sendMessageAndAwait(persist) { packetId ->
                     factory.publish(
                         qos = EXACTLY_ONCE,
+                        retain = retain,
                         topicName = topic,
                         payload = payload,
                         packetIdentifier = packetId
