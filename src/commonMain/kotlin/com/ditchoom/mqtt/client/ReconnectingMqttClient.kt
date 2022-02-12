@@ -10,10 +10,7 @@ import com.ditchoom.mqtt.topic.Node
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.flow.MutableSharedFlow
-import kotlinx.coroutines.flow.filter
-import kotlinx.coroutines.flow.filterIsInstance
-import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.*
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
@@ -42,6 +39,11 @@ class ReconnectingMqttClient private constructor(
     private var pauseCount = 0
     internal var reconnectionCount = 0uL
         private set
+    private val connectionStateObserversInternal =
+        MutableSharedFlow<ConnectionState>(1, onBufferOverflow = BufferOverflow.DROP_OLDEST)
+    var currentConnectionState :ConnectionState = Initializing
+        private set
+    val connectionStateObservers :SharedFlow<ConnectionState> = connectionStateObserversInternal
 
     override fun toString(): String {
         return "ReconnectingClient(${connectionRequest.protocolName}:${connectionRequest.protocolVersion}) - ${connectionRequest.clientIdentifier}@$hostname:$port isConnected:${isConnected()}"
@@ -50,41 +52,48 @@ class ReconnectingMqttClient private constructor(
     fun isConnected() = currentClient?.socketSession?.isOpen() ?: false
 
     val stayConnectedJob = scope.launch(CoroutineName("$this: Stay connected, reconnect if needed")) {
+        updateConnectionState(Initializing)
         val initialDelay = 0.1.seconds
         val maxDelay = 30.seconds
         val factor = 2.0
         var currentDelay = initialDelay
-        while (isActive && maxReconnectionCount >= reconnectionCount++) {
-            while (pauseCount > 0) {
-                pausedChannel.receive()
-                pauseCount--
-            }
-            var hadError = false
-            try {
-                connect(this)
-            } catch (_: CancellationException) {
-                return@launch
-            } catch (t: Throwable) {
-                t.printStackTrace()
-                hadError = true
-            } finally {
-                currentClient = null
-                if (hadError) {
-                    delay(keepAliveDelay(reconnectionCount.toLong()))
-                } else if (reconnectionCount > 1uL) {
-                    delay(currentDelay)
-                    currentDelay =
-                        (currentDelay.inWholeMilliseconds * factor).coerceAtMost(maxDelay.toDouble(DurationUnit.MILLISECONDS)).milliseconds
+        var isCancelled = false
+        try {
+            while (isActive && maxReconnectionCount >= reconnectionCount++) {
+                while (pauseCount > 0) {
+                    if (!pausedChannel.isEmpty) { updateConnectionState(ReconnectionPaused) }
+                    pausedChannel.receive()
+                    pauseCount--
+                }
+                try {
+                    connect(this)
+                } catch (_: CancellationException) {
+                    isCancelled = true
+                    return@launch
+                } catch (t: Throwable) {
+                    updateConnectionState(ConnectionAttemptFailed(t.message))
+                    currentClient = null
+                    val delayDuration = keepAliveDelay(reconnectionCount.toLong())
+                    updateConnectionState(DisconnectedReconnectWithDelay(delayDuration.inWholeMilliseconds))
+                    delay(delayDuration)
+                    if (reconnectionCount > 1uL) {
+                        currentDelay =
+                            (currentDelay.inWholeMilliseconds * factor).coerceAtMost(maxDelay.toDouble(DurationUnit.MILLISECONDS)).milliseconds
+                    }
                 }
             }
+        } finally {
+            updateConnectionState(PermanentlyStopped(isCancelled || !isActive))
         }
     }
 
     private suspend fun connect(scope: CoroutineScope) {
-        val clientConnection =
+        val clientConnectionDeferred =
             MqttClient.connectOnce(scope, connectionRequest, port, hostname, useWebsockets, persistence, connectTimeout)
-                .await()
+        updateConnectionState(AttemptingConnection)
+        val clientConnection = clientConnectionDeferred.await()
         if (clientConnection is MqttClient.Companion.ClientConnection.Exception) {
+            updateConnectionState(ConnectionAttemptFailed(clientConnection.throwable.message))
             throw clientConnection.throwable
         }
         val client = (clientConnection as MqttClient.Companion.ClientConnection.Connected).client
@@ -117,8 +126,14 @@ class ReconnectingMqttClient private constructor(
         if (connectedFlow.subscriptionCount.value > 0) {
             connectedFlow.emit(client)
         }
+        updateConnectionState(Connected(reconnectionCount.toLong()))
         client.waitUntilDisconnectAsync()
         client.keepAliveJob.cancel()
+    }
+    
+    private suspend fun updateConnectionState(state: ConnectionState) {
+        currentConnectionState = state
+        connectionStateObserversInternal.emit(state)
     }
 
     fun pauseReconnects() {
