@@ -39,7 +39,7 @@ class MqttClientTest {
     fun publishAtLeastOnce() = block {
         if (getNetworkCapabilities() != NetworkCapabilities.FULL_SOCKET_ACCESS) return@block
         val client = prepareConnection(this)
-        assertNotNull(client.publishAtLeastOnce("taco", "cheese").await())
+        assertNotNull(client.publishAtLeastOnce("taco", false, "cheese").await())
         disconnect(client)
     }
 
@@ -47,7 +47,7 @@ class MqttClientTest {
     @Test
     fun publishAtLeastOnceWebsocket() = block {
         val client = prepareConnection(this, true)
-        assertNotNull(client.publishAtLeastOnce("taco", "cheese").await())
+        assertNotNull(client.publishAtLeastOnce("taco", false, "cheese").await())
         disconnect(client)
     }
 
@@ -55,7 +55,7 @@ class MqttClientTest {
     fun publishAtMostOnce() = block {
         if (getNetworkCapabilities() != NetworkCapabilities.FULL_SOCKET_ACCESS) return@block
         val client = prepareConnection(this)
-        client.publishAtMostOnce("taco", "cheese").await()
+        client.publishAtMostOnce("taco", false, "cheese").await()
         disconnect(client)
     }
 
@@ -63,7 +63,7 @@ class MqttClientTest {
     @Test
     fun publishAtMostOnceWebsocket() = block {
         val client = prepareConnection(this, true)
-        client.publishAtMostOnce("taco", "cheese").await()
+        client.publishAtMostOnce("taco", false, "cheese").await()
         disconnect(client)
     }
 

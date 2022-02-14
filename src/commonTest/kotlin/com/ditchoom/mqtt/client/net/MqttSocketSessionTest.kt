@@ -35,7 +35,11 @@ class MqttSocketSessionTest {
     fun connectWebsockets() = block {
         val connectionRequest =
             ConnectionRequest(payload = ConnectionRequest.Payload(clientId = "taco"))
-        val socketSession = MqttSocketSession.openConnection(connectionRequest, 80u, useWebsockets = true)
+        val socketSession = MqttSocketSession.openConnection(
+            connectionRequest,
+            80u,
+            "localhost",
+            true)
         assertTrue(socketSession.connectionAcknowledgement.isSuccessful)
         socketSession.write(
             connectionRequest.controlPacketFactory.publish(
