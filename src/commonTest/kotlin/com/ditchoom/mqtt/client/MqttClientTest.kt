@@ -9,6 +9,7 @@ import com.ditchoom.socket.NetworkCapabilities
 import com.ditchoom.socket.getNetworkCapabilities
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlin.random.Random
 import kotlin.test.*
 import kotlin.time.Duration.Companion.seconds
@@ -32,7 +33,7 @@ class MqttClientTest {
             "localhost", useWebsockets,
             InMemoryPersistence(),
             1.5.seconds,
-            null
+            MutableSharedFlow()
         ).await() as MqttClient.Companion.ClientConnection.Connected).client
     }
 

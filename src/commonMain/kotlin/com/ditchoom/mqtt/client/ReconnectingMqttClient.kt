@@ -27,7 +27,7 @@ class ReconnectingMqttClient private constructor(
     val connectTimeout: Duration,
     private val persistence: Persistence = InMemoryPersistence(),
     private val keepAliveDelay: (Long) -> Duration,
-    private val messageSentListener: ((ControlPacket) -> Unit)?,
+    val messageSentListener: MutableSharedFlow<ControlPacket>,
 ) : IMqttClient {
     internal var currentClient: MqttClient? = null
     private val factory = connectionRequest.controlPacketFactory
@@ -105,7 +105,7 @@ class ReconnectingMqttClient private constructor(
         currentClient = client
         client.scope.launch(CoroutineName("$this: Outgoing packet queue")) {
             try {
-                while (isActive && client.socketSession.isOpen()) {
+                while (isActive) {
                     val outgoingPacket = outgoingQueue.receive()
                     client.sendOutgoing(outgoingPacket)
                 }
@@ -115,7 +115,7 @@ class ReconnectingMqttClient private constructor(
         }
         client.scope.launch(CoroutineName("$this: Incoming packet queue")) {
             try {
-                while (isActive && client.socketSession.isOpen()) {
+                while (isActive) {
                     client.incoming.collect {
                         incoming.emit(it)
                     }
@@ -347,12 +347,19 @@ class ReconnectingMqttClient private constructor(
                 connectTimeout,
                 InMemoryPersistence(),
                 keepAliveDelay,
-                outgoingCb,
+                MutableSharedFlow(),
             )
             if (incomingCb != null) {
                 scope.launch {
                     client.incoming.collect {
                         incomingCb.invoke(it)
+                    }
+                }
+            }
+            if (outgoingCb != null) {
+                scope.launch {
+                    client.messageSentListener.collect {
+                        outgoingCb.invoke(it)
                     }
                 }
             }

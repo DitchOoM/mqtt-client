@@ -11,6 +11,8 @@ import com.ditchoom.mqtt.controlpacket.IConnectionAcknowledgment
 import com.ditchoom.mqtt.controlpacket.IConnectionRequest
 import com.ditchoom.socket.*
 import com.ditchoom.websocket.WebSocketConnectionOptions
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.ExperimentalTime
@@ -24,7 +26,7 @@ class MqttSocketSession private constructor(
     private val writer: Writer<ParcelablePlatformBuffer>,
     private val reader: BufferedControlPacketReader,
     private val socketController: SocketController,
-    private val messageSentListener: ((ControlPacket) -> Unit)?
+    private val messageSentListener: MutableSharedFlow<ControlPacket>?
 ) : SuspendCloseable {
     private var isClosed = false
     var lastMessageReceivedTimestamp: TimeMark = TimeSource.Monotonic.markNow()
@@ -34,6 +36,9 @@ class MqttSocketSession private constructor(
 
     suspend fun write(vararg controlPackets: ControlPacket) {
         writer.write(controlPackets.toBuffer(), timeout)
+        if (messageSentListener != null) {
+            controlPackets.forEach { messageSentListener.emit(it) }
+        }
     }
 
     suspend fun read() = reader.readControlPacket()
@@ -53,7 +58,7 @@ class MqttSocketSession private constructor(
             useWebsockets: Boolean = false,
             socketTimeout: Duration = connectionRequest.keepAliveTimeoutSeconds.toInt().seconds * 1.5,
             socketOptions: SocketOptions? = null,
-            messageSentListener: ((ControlPacket) -> Unit)? = null,
+            messageSentListener: MutableSharedFlow<ControlPacket>? = null,
         ): MqttSocketSession {
             val socket = if (useWebsockets) {
                 getWebSocketClient(WebSocketConnectionOptions(hostname, port.toInt(), "mqtt", "/mqtt", socketTimeout))
@@ -64,7 +69,7 @@ class MqttSocketSession private constructor(
             }
             val connect = connectionRequest.toBuffer()
             socket.write(connect, socketTimeout)
-            messageSentListener?.invoke(connectionRequest)
+            messageSentListener?.emit(connectionRequest)
             val bufferedControlPacketReader =
                 BufferedControlPacketReader(connectionRequest.controlPacketFactory, socketTimeout, socket)
             val response = bufferedControlPacketReader.readControlPacket()
