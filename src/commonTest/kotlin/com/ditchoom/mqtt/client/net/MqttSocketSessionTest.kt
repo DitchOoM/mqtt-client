@@ -9,6 +9,7 @@ import com.ditchoom.socket.NetworkCapabilities
 import com.ditchoom.socket.getNetworkCapabilities
 import kotlin.test.Test
 import kotlin.test.assertTrue
+import kotlin.time.Duration.Companion.seconds
 import kotlin.time.ExperimentalTime
 
 @ExperimentalUnsignedTypes
@@ -20,7 +21,15 @@ class MqttSocketSessionTest {
         if (getNetworkCapabilities() != NetworkCapabilities.FULL_SOCKET_ACCESS) return@block
         val connectionRequest =
             ConnectionRequest(payload = ConnectionRequest.Payload(clientId = "taco"))
-        val socketSession = MqttSocketSession.openConnection(connectionRequest, 1883u)
+        val socketSession = MqttSocketSession.openConnection(
+            connectionRequest,
+            1883u,
+            "localhost",
+            false,
+            connectionRequest.keepAliveTimeoutSeconds.toInt().seconds * 1.5,
+            null,
+            null
+        )
         assertTrue(socketSession.connectionAcknowledgement.isSuccessful)
         socketSession.write(
             connectionRequest.controlPacketFactory.publish(
@@ -39,7 +48,10 @@ class MqttSocketSessionTest {
             connectionRequest,
             80u,
             "localhost",
-            true)
+            true,
+            connectionRequest.keepAliveTimeoutSeconds.toInt().seconds * 1.5,
+            null,
+            null)
         assertTrue(socketSession.connectionAcknowledgement.isSuccessful)
         socketSession.write(
             connectionRequest.controlPacketFactory.publish(

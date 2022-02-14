@@ -29,9 +29,10 @@ class MqttClientTest {
             scope,
             connectionRequest,
             port.toUShort(),
-            useWebsockets = useWebsockets,
-            persistence = InMemoryPersistence(),
-            connectTimeout = 1.5.seconds
+            "localhost", useWebsockets,
+            InMemoryPersistence(),
+            1.5.seconds,
+            null
         ).await() as MqttClient.Companion.ClientConnection.Connected).client
     }
 

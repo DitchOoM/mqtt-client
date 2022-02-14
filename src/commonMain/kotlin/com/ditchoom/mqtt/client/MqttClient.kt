@@ -266,15 +266,17 @@ class MqttClient private constructor(
             useWebsockets: Boolean = false,
             persistence: Persistence,
             connectTimeout: Duration,
+            messageSentListener: ((ControlPacket) -> Unit)? = null,
         ): Deferred<ClientConnection> = scope.async(CoroutineName("$this: @$hostname:$port")) {
             val clientScope = scope + Job()
             val outgoing = Channel<ControlPacket>()
             val incoming = MutableSharedFlow<ControlPacket>()
             val socketSession = try {
-                MqttSocketSession.openConnection(connectionRequest, port, hostname, useWebsockets, connectionRequest.keepAliveTimeoutSeconds.toInt().seconds * 1.5)
+                MqttSocketSession.openConnection(connectionRequest, port, hostname, useWebsockets, connectionRequest.keepAliveTimeoutSeconds.toInt().seconds * 1.5, null, messageSentListener)
             } catch (t: Throwable) {
                 return@async ClientConnection.Exception(t)
             }
+            incoming.emit(socketSession.connectionAcknowledgement)
             val client = MqttClient(clientScope, socketSession, connectionRequest, outgoing, incoming, persistence)
             clientScope.launch(CoroutineName("$this: Reading $socketSession @ $hostname:$port")) {
                 try {

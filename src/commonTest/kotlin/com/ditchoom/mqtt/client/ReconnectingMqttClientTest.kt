@@ -37,7 +37,7 @@ class ReconnectingMqttClientTest {
             portLocal,
             hostname,
             useWebsockets = useWebsockets,
-            connectTimeout = 3.seconds
+            connectTimeout = 3.seconds,
         )
     }
 

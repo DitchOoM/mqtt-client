@@ -24,6 +24,7 @@ class MqttSocketSession private constructor(
     private val writer: Writer<ParcelablePlatformBuffer>,
     private val reader: BufferedControlPacketReader,
     private val socketController: SocketController,
+    private val messageSentListener: ((ControlPacket) -> Unit)?
 ) : SuspendCloseable {
     private var isClosed = false
     var lastMessageReceivedTimestamp: TimeMark = TimeSource.Monotonic.markNow()
@@ -52,6 +53,7 @@ class MqttSocketSession private constructor(
             useWebsockets: Boolean = false,
             socketTimeout: Duration = connectionRequest.keepAliveTimeoutSeconds.toInt().seconds * 1.5,
             socketOptions: SocketOptions? = null,
+            messageSentListener: ((ControlPacket) -> Unit)? = null,
         ): MqttSocketSession {
             val socket = if (useWebsockets) {
                 getWebSocketClient(WebSocketConnectionOptions(hostname, port.toInt(), "mqtt", "/mqtt", socketTimeout))
@@ -62,11 +64,12 @@ class MqttSocketSession private constructor(
             }
             val connect = connectionRequest.toBuffer()
             socket.write(connect, socketTimeout)
+            messageSentListener?.invoke(connectionRequest)
             val bufferedControlPacketReader =
                 BufferedControlPacketReader(connectionRequest.controlPacketFactory, socketTimeout, socket)
             val response = bufferedControlPacketReader.readControlPacket()
             if (response is IConnectionAcknowledgment) {
-                return MqttSocketSession(response, socketTimeout, socket, bufferedControlPacketReader, socket)
+                return MqttSocketSession(response, socketTimeout, socket, bufferedControlPacketReader, socket, messageSentListener)
             }
             throw MqttException(
                 "Invalid response received. Expected ConnectionAcknowledgment, instead received $response",

@@ -27,6 +27,7 @@ class ReconnectingMqttClient private constructor(
     val connectTimeout: Duration,
     private val persistence: Persistence = InMemoryPersistence(),
     private val keepAliveDelay: (Long) -> Duration,
+    private val messageSentListener: ((ControlPacket) -> Unit)?,
 ) : IMqttClient {
     internal var currentClient: MqttClient? = null
     private val factory = connectionRequest.controlPacketFactory
@@ -89,7 +90,7 @@ class ReconnectingMqttClient private constructor(
 
     private suspend fun connect(scope: CoroutineScope) {
         val clientConnectionDeferred =
-            MqttClient.connectOnce(scope, connectionRequest, port, hostname, useWebsockets, persistence, connectTimeout)
+            MqttClient.connectOnce(scope, connectionRequest, port, hostname, useWebsockets, persistence, connectTimeout, messageSentListener)
         updateConnectionState(AttemptingConnection)
         val clientConnection = clientConnectionDeferred.await()
         if (clientConnection is MqttClient.Companion.ClientConnection.Exception) {
@@ -333,6 +334,8 @@ class ReconnectingMqttClient private constructor(
             useWebsockets: Boolean = false,
             connectTimeout: Duration = 30.seconds,
             keepAliveDelay: (Long) -> Duration = { 1.seconds },
+            incomingCb: ((ControlPacket) -> Unit)? = null,
+            outgoingCb:((ControlPacket) -> Unit)? = null,
         ): Pair<ReconnectingMqttClient, CancelConnection> {
             val scope = parentScope + CoroutineName("ReconnectingMqttClient $hostname:$port") + Job()
             val client = ReconnectingMqttClient(
@@ -341,9 +344,18 @@ class ReconnectingMqttClient private constructor(
                 port,
                 hostname,
                 useWebsockets,
-                keepAliveDelay = keepAliveDelay,
-                connectTimeout = connectTimeout
+                connectTimeout,
+                InMemoryPersistence(),
+                keepAliveDelay,
+                outgoingCb,
             )
+            if (incomingCb != null) {
+                scope.launch {
+                    client.incoming.collect {
+                        incomingCb.invoke(it)
+                    }
+                }
+            }
             val cancelConnection = CancelConnection(client)
             return Pair(client, cancelConnection)
         }
