@@ -9,9 +9,18 @@ import kotlinx.coroutines.Deferred
 interface IMqttClient : SuspendCloseable {
     fun publishAtMostOnce(topic: CharSequence, retain: Boolean = false): Deferred<Unit>
     fun publishAtMostOnce(topic: CharSequence, retain: Boolean = false, payload: String? = null): Deferred<Unit>
-    fun publishAtMostOnce(topic: CharSequence, retain: Boolean = false, payload: ParcelablePlatformBuffer? = null): Deferred<Unit>
+    fun publishAtMostOnce(
+        topic: CharSequence,
+        retain: Boolean = false,
+        payload: ParcelablePlatformBuffer? = null
+    ): Deferred<Unit>
 
-    fun publishAtLeastOnce(topic: CharSequence, retain: Boolean = false, persist: Boolean = true): Deferred<IPublishAcknowledgment>
+    fun publishAtLeastOnce(
+        topic: CharSequence,
+        retain: Boolean = false,
+        persist: Boolean = true
+    ): Deferred<IPublishAcknowledgment>
+
     fun publishAtLeastOnce(
         topic: CharSequence,
         retain: Boolean = false,
@@ -26,15 +35,17 @@ interface IMqttClient : SuspendCloseable {
         persist: Boolean = true
     ): Deferred<IPublishAcknowledgment>
 
-    fun publishExactlyOnce(topic: CharSequence,
-                           retain: Boolean = false,
-                           persist: Boolean = true
+    fun publishExactlyOnce(
+        topic: CharSequence,
+        retain: Boolean = false,
+        persist: Boolean = true
     ): DeferredPublishExactlyOnceResponse
 
-    fun publishExactlyOnce(topic: CharSequence,
-                           retain: Boolean = false,
-                           payload: String? = null,
-                           persist: Boolean = true
+    fun publishExactlyOnce(
+        topic: CharSequence,
+        retain: Boolean = false,
+        payload: String? = null,
+        persist: Boolean = true
     ): DeferredPublishExactlyOnceResponse
 
     fun publishExactlyOnce(

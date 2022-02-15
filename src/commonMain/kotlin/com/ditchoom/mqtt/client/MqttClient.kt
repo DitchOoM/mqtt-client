@@ -57,21 +57,37 @@ class MqttClient private constructor(
         }
     }
 
-    override fun publishAtMostOnce(topic: CharSequence, retain: Boolean) = publishAtMostOnce(topic, retain, null as? ParcelablePlatformBuffer?)
-    override fun publishAtMostOnce(topic: CharSequence, retain: Boolean, payload: String?) =
-        publishAtMostOnce(topic,retain, payload?.toBuffer())
+    override fun publishAtMostOnce(topic: CharSequence, retain: Boolean) =
+        publishAtMostOnce(topic, retain, null as? ParcelablePlatformBuffer?)
 
-    override fun publishAtMostOnce(topic: CharSequence, retain: Boolean, payload: ParcelablePlatformBuffer?) = scope.async {
-        sendOutgoing(packetFactory.publish(qos = AT_MOST_ONCE, retain = retain, topicName = topic, payload = payload))
-    }
+    override fun publishAtMostOnce(topic: CharSequence, retain: Boolean, payload: String?) =
+        publishAtMostOnce(topic, retain, payload?.toBuffer())
+
+    override fun publishAtMostOnce(topic: CharSequence, retain: Boolean, payload: ParcelablePlatformBuffer?) =
+        scope.async {
+            sendOutgoing(
+                packetFactory.publish(
+                    qos = AT_MOST_ONCE,
+                    retain = retain,
+                    topicName = topic,
+                    payload = payload
+                )
+            )
+        }
 
     override fun publishAtLeastOnce(topic: CharSequence, retain: Boolean, persist: Boolean) = publishAtLeastOnce(
-        topic, retain, null as? ParcelablePlatformBuffer?)
+        topic, retain, null as? ParcelablePlatformBuffer?
+    )
 
     override fun publishAtLeastOnce(topic: CharSequence, retain: Boolean, payload: String?, persist: Boolean) =
         publishAtLeastOnce(topic, retain, payload?.toBuffer())
 
-    override fun publishAtLeastOnce(topic: CharSequence, retain: Boolean, payload: ParcelablePlatformBuffer?, persist: Boolean) =
+    override fun publishAtLeastOnce(
+        topic: CharSequence,
+        retain: Boolean,
+        payload: ParcelablePlatformBuffer?,
+        persist: Boolean
+    ) =
         scope.async {
             val packetIdentifier = persistence.nextPacketIdentifier()
             val packet = packetFactory.publish(
@@ -97,11 +113,20 @@ class MqttClient private constructor(
     override fun publishExactlyOnce(topic: CharSequence, retain: Boolean, payload: String?, persist: Boolean) =
         publishExactlyOnce(topic, retain, payload?.toBuffer())
 
-    override fun publishExactlyOnce(topic: CharSequence, retain: Boolean, payload: ParcelablePlatformBuffer?, persist: Boolean) : DeferredPublishExactlyOnceResponse {
+    override fun publishExactlyOnce(
+        topic: CharSequence,
+        retain: Boolean,
+        payload: ParcelablePlatformBuffer?,
+        persist: Boolean
+    ): DeferredPublishExactlyOnceResponse {
         val publishReceivedDeferred = scope.async {
             val packetIdentifier = persistence.nextPacketIdentifier()
             val packet = packetFactory.publish(
-                qos = EXACTLY_ONCE, retain = retain, topicName = topic, payload = payload, packetIdentifier = packetIdentifier
+                qos = EXACTLY_ONCE,
+                retain = retain,
+                topicName = topic,
+                payload = payload,
+                packetIdentifier = packetIdentifier
             )
             if (persist) {
                 persistence.save(packetIdentifier, packet)
@@ -278,7 +303,15 @@ class MqttClient private constructor(
             val outgoing = Channel<ControlPacket>()
             val incoming = MutableSharedFlow<ControlPacket>(1, 1)
             val socketSession = try {
-                MqttSocketSession.openConnection(connectionRequest, port, hostname, useWebsockets, connectionRequest.keepAliveTimeoutSeconds.toInt().seconds * 1.5, null, messageSentListener)
+                MqttSocketSession.openConnection(
+                    connectionRequest,
+                    port,
+                    hostname,
+                    useWebsockets,
+                    connectionRequest.keepAliveTimeoutSeconds.toInt().seconds * 1.5,
+                    null,
+                    messageSentListener
+                )
             } catch (t: Throwable) {
                 return@async ClientConnection.Exception(t)
             }

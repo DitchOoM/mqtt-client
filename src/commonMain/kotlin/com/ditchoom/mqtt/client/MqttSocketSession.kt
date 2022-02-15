@@ -11,7 +11,6 @@ import com.ditchoom.mqtt.controlpacket.IConnectionAcknowledgment
 import com.ditchoom.mqtt.controlpacket.IConnectionRequest
 import com.ditchoom.socket.*
 import com.ditchoom.websocket.WebSocketConnectionOptions
-import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
@@ -74,7 +73,14 @@ class MqttSocketSession private constructor(
                 BufferedControlPacketReader(connectionRequest.controlPacketFactory, socketTimeout, socket)
             val response = bufferedControlPacketReader.readControlPacket()
             if (response is IConnectionAcknowledgment) {
-                return MqttSocketSession(response, socketTimeout, socket, bufferedControlPacketReader, socket, messageSentListener)
+                return MqttSocketSession(
+                    response,
+                    socketTimeout,
+                    socket,
+                    bufferedControlPacketReader,
+                    socket,
+                    messageSentListener
+                )
             }
             throw MqttException(
                 "Invalid response received. Expected ConnectionAcknowledgment, instead received $response",

@@ -75,6 +75,9 @@ kotlin {
 
         val androidMain by getting {
             kotlin.srcDir("src/commonJvmMain/kotlin")
+            dependencies {
+                implementation("androidx.appcompat:appcompat:1.4.1")
+            }
         }
 
         val androidTest by getting {

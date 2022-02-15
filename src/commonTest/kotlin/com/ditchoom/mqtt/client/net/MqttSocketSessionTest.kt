@@ -51,7 +51,8 @@ class MqttSocketSessionTest {
             true,
             connectionRequest.keepAliveTimeoutSeconds.toInt().seconds * 1.5,
             null,
-            null)
+            null
+        )
         assertTrue(socketSession.connectionAcknowledgement.isSuccessful)
         socketSession.write(
             connectionRequest.controlPacketFactory.publish(
