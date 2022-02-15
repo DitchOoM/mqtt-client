@@ -41,6 +41,12 @@ class MqttClient private constructor(
         scope.launch(CoroutineName("$this: Automatic Message Handler on $socketSession")) {
             incoming.collect { packet ->
                 when (packet) {
+                    is IPublishMessage -> {
+                        val expectedResponse = packet.expectedResponse()
+                        if (expectedResponse != null) {
+                            outgoing.send(expectedResponse)
+                        }
+                    }
                     is IPublishAcknowledgment -> persistence.delete(packet.packetIdentifier)
                     is IPublishReceived -> publishExactlyOnceInternalStep2(packet)
                     is IPublishComplete -> persistence.delete(packet.packetIdentifier)
