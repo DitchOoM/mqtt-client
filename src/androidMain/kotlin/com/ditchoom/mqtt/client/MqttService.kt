@@ -1,132 +1,65 @@
 package com.ditchoom.mqtt.client
 
-import android.R
-import android.app.NotificationChannel
-import android.app.NotificationManager
+import android.app.Notification
 import android.app.Service
 import android.content.Context
 import android.content.Intent
-import android.net.ConnectivityManager
+import android.os.Build
+import android.os.IBinder
 import android.util.Log
-import androidx.core.app.NotificationCompat
-import androidx.core.app.NotificationManagerCompat
 import com.ditchoom.mqtt.controlpacket.IConnectionRequest
-import kotlinx.coroutines.*
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlin.coroutines.resume
-import kotlin.time.Duration.Companion.seconds
 import kotlin.time.ExperimentalTime
 
 
 @ExperimentalTime
 class MqttService : Service() {
 
-    override fun onBind(intent: Intent?) = object : IPCMqttClientFactory.Stub() {
-        private val clientChangeCallbacks = mutableListOf<MqttClientsChangeCallback>()
-        val connectivityManager = getSystemService(CONNECTIVITY_SERVICE) as ConnectivityManager
-        private val clientMapping = mutableMapOf<IPCMqttClient, ReconnectingMqttClient>()
-
-        override fun openConnection(
-            port: Int,
-            host: String,
-            useWebsockets: Boolean,
-            connectionRequestBundle: ControlPacketWrapper
-        ): IPCMqttClient {
-            val connectionRequest = connectionRequestBundle.external as IConnectionRequest
-
-            val ipcScope = processScope +
-                    CoroutineName("IPCClient ${connectionRequest.clientIdentifier}@$host:$port")
-            val ipcClient = IPCMqttClientImpl(ipcScope + Dispatchers.Main)
-            ipcScope.launch {
-                val (reconnectingClient, _) = ReconnectingMqttClient.stayConnected(
-                    processScope,
-                    connectionRequest,
-                    port.toUShort(),
-                    host,
-                    useWebsockets,
-                    30.seconds,
-                    { 1.seconds },
-                    { incoming ->
-                        val wrapped = ControlPacketWrapper(incoming)
-                        Log.i("RAHUL", "Incoming $incoming")
-                        ipcClient.incomingCb.forEach { it.onSuccess(wrapped) }
-                    }) { outgoing ->
-                    val wrapped = ControlPacketWrapper(outgoing)
-                    Log.i("RAHUL", "Outgoing $outgoing")
-                    ipcClient.outgoingCb.forEach { it.onSuccess(wrapped) }
-                }
-                ipcClient.setClient(reconnectingClient)
-                MqttClientNetworkObserver.registerNetworkCallback(
-                    processScope,
-                    connectivityManager,
-                    reconnectingClient
-                )
-                clientMapping[ipcClient] = reconnectingClient
-                clientChangeCallbacks.forEach { it.onClientAdded(ipcClient) }
-            }
-
-            return ipcClient
-        }
-
-        override fun killConnection(client: IPCMqttClient) {
-            val reconnectingClient = clientMapping.remove(client) ?: return
-            processScope.launch {
-                reconnectingClient.sendDisconnect()
-                reconnectingClient.close()
-                clientChangeCallbacks.forEach { it.onClientRemoved(client) }
-            }
-        }
-
-        override fun addClientsChangeCallback(cb: MqttClientsChangeCallback) {
-            clientChangeCallbacks += cb
-        }
-
-        override fun getAllClients(): List<IPCMqttClient> {
-            return clientMapping.keys.toList()
-        }
-
-        override fun removeClientsChangeCallback(cb: MqttClientsChangeCallback) {
-            clientChangeCallbacks -= cb
-        }
+    override fun onBind(intent: Intent): IBinder {
+        updateForegroundServiceState(intent)
+        return MqttServiceClientFactoryBinder(this)
     }
 
-    override fun onCreate() {
-        super.onCreate()
-
-        prepareChannel(this, "mqtt", NotificationManagerCompat.IMPORTANCE_MIN)
-        startForeground(
-            123, NotificationCompat.Builder(this, "mqtt")
-                .setTicker("Mqtt Running")
-                .setSmallIcon(R.color.black)
-                //.setLargeIcon(Bitmap.createScaledBitmap(icon, 128, 128, false))
-                .setOngoing(true)
-                .setContentText("running").build()
-        )
-    }
-
-    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-
+    override fun onStartCommand(intent: Intent, flags: Int, startId: Int): Int {
+        updateForegroundServiceState(intent)
         return START_STICKY
     }
 
-    private fun prepareChannel(context: Context, id: String, importance: Int) {
-        val appName = ("mqtt")
-        val description = ("mqtt")
-        val nm = context.getSystemService(NOTIFICATION_SERVICE) as NotificationManager
-        var nChannel = nm.getNotificationChannel(id)
-        if (nChannel == null) {
-            nChannel = NotificationChannel(id, appName, importance)
-            nChannel.description = description
-            nm.createNotificationChannel(nChannel)
+    private fun updateForegroundServiceState(intent: Intent) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.ECLAIR) return
+        val shouldForceForegroundStateChange = intent.getBooleanExtra(SHOULD_FORCE_FOREGROUND_CHANGE, false)
+        val id = intent.getIntExtra(FOREGROUND_SERVICE_ID_EXTRA, 0)
+        val notification = intent.getParcelableExtra<Notification>(FOREGROUND_SERVICE_EXTRA)
+        if (shouldForceForegroundStateChange) {
+            if (notification != null) {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q &&
+                    intent.hasExtra(FOREGROUND_SERVICE_TYPE_EXTRA)) {
+                    val type = intent.getIntExtra(FOREGROUND_SERVICE_TYPE_EXTRA, Int.MIN_VALUE)
+                    startForeground(id, notification, type)
+                } else {
+                    startForeground(id, notification)
+                }
+            } else {
+                stopForeground(true)
+            }
         }
+
     }
 
     companion object {
 
-
+        private const val FOREGROUND_SERVICE_EXTRA = "foregroundServiceNotification"
+        private const val SHOULD_FORCE_FOREGROUND_CHANGE = "forceForegroundChange"
+        private const val FOREGROUND_SERVICE_TYPE_EXTRA = "foregroundServiceNotificationType"
+        private const val FOREGROUND_SERVICE_ID_EXTRA = "foregroundServiceNotificationID"
         private val serviceJob = Job()
         internal val processScope = CoroutineScope(Dispatchers.Default + serviceJob)
 
-        suspend fun getFactory(context: Context) = suspendCancellableCoroutine<IPCMqttClientFactory> {
+        suspend fun getFactory(context: Context, shouldForceForegroundStateChange: Boolean = false, foregroundNotificationId: Int = 0, foregroundNotification: Notification? = null, foregroundNotificationType: Int = 0) = suspendCancellableCoroutine<IPCMqttClientFactory> {
             var hasResumed = false
             val mqttServiceConnection = MqttServiceConnection({ clientFactory ->
                 if (!hasResumed) {
@@ -140,12 +73,20 @@ class MqttService : Service() {
                     it.cancel()
                 }
             }
-
-            context.startForegroundService(Intent(context, MqttService::class.java))
+            val intent = Intent(context, MqttService::class.java)
+            intent.putExtra(SHOULD_FORCE_FOREGROUND_CHANGE, shouldForceForegroundStateChange)
+            intent.putExtra(FOREGROUND_SERVICE_ID_EXTRA, foregroundNotificationId)
+            intent.putExtra(FOREGROUND_SERVICE_TYPE_EXTRA, foregroundNotificationType)
+            if (foregroundNotification != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                intent.putExtra(FOREGROUND_SERVICE_EXTRA, foregroundNotification)
+                context.startForegroundService(intent)
+            } else {
+                context.startService(intent)
+            }
             context.bindService(
-                Intent(context, MqttService::class.java),
+                intent,
                 mqttServiceConnection,
-                Context.BIND_AUTO_CREATE
+                BIND_AUTO_CREATE
             )
         }
 
