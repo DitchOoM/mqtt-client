@@ -33,6 +33,7 @@ class ReconnectingMqttClientTest {
         val portLocal = port?.toUShort() ?: if (useWebsockets) 80u else 1883u
         return ReconnectingMqttClient.stayConnected(
             scope,
+            InMemoryPersistence(),
             connectionRequest,
             portLocal,
             hostname,
