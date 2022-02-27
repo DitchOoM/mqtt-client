@@ -35,7 +35,7 @@ class IPCMqttClientImpl(private val scope: CoroutineScope) : IPCMqttClient.Stub(
         b.putParcelable("state", client.currentConnectionState)
         return b
     }
-
+    override fun remoteHashCode() = hashCode()
     override fun getConnectionRequest() = ControlPacketWrapper(client.connectionRequest)
     override fun getHost() = client.hostname
     override fun getPort() = client.port.toInt()

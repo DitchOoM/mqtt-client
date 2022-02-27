@@ -11,6 +11,7 @@ interface IPCMqttClient {
     String getHost();
     int getPort();
     boolean usingWebsockets();
+    int remoteHashCode();
     void addConnectionCallback(in MqttConnectionStateCallback callback);
     void removeConnectionCallback(in MqttConnectionStateCallback callback);
 
