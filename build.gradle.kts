@@ -51,7 +51,7 @@ kotlin {
             dependencies {
                 compileOnly("com.ditchoom:mqtt-4-models:1.0.22")
                 compileOnly("com.ditchoom:mqtt-5-models:1.0.16")
-                api("com.ditchoom:socket:1.0.36")
+                api("com.ditchoom:socket:1.0.37")
                 api("com.ditchoom:buffer:1.0.56")
                 api("com.ditchoom:mqtt-base-models:1.0.28")
                 implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.6.0")
@@ -84,7 +84,6 @@ kotlin {
         val jsTest by getting {
             dependencies {
                 implementation(kotlin("test-js"))
-                implementation(npm("tcp-port-used", "1.0.1"))
             }
         }
     }
