@@ -5,6 +5,7 @@ import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.os.Build
+import android.os.Bundle
 import android.os.IBinder
 import android.util.Log
 import com.ditchoom.mqtt.controlpacket.IConnectionRequest
@@ -37,7 +38,8 @@ class MqttService : Service() {
         if (shouldForceForegroundStateChange) {
             if (notification != null) {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q &&
-                    intent.hasExtra(FOREGROUND_SERVICE_TYPE_EXTRA)) {
+                    intent.hasExtra(FOREGROUND_SERVICE_TYPE_EXTRA)
+                ) {
                     val type = intent.getIntExtra(FOREGROUND_SERVICE_TYPE_EXTRA, Int.MIN_VALUE)
                     startForeground(id, notification, type)
                 } else {
@@ -59,7 +61,13 @@ class MqttService : Service() {
         private val serviceJob = Job()
         internal val processScope = CoroutineScope(Dispatchers.Default + serviceJob)
 
-        suspend fun getFactory(context: Context, shouldForceForegroundStateChange: Boolean = false, foregroundNotificationId: Int = 0, foregroundNotification: Notification? = null, foregroundNotificationType: Int = 0) = suspendCancellableCoroutine<IPCMqttClientFactory> {
+        suspend fun getFactory(
+            context: Context,
+            shouldForceForegroundStateChange: Boolean = false,
+            foregroundNotificationId: Int = 0,
+            foregroundNotification: Notification? = null,
+            foregroundNotificationType: Int = 0
+        ) = suspendCancellableCoroutine<IPCMqttClientFactory> {
             var hasResumed = false
             val mqttServiceConnection = MqttServiceConnection({ clientFactory ->
                 if (!hasResumed) {
@@ -91,14 +99,18 @@ class MqttService : Service() {
         }
 
         fun connect(
-            context: Context,
             clientFactory: IPCMqttClientFactory,
+            persistenceFactory: ParcelablePersistenceFactory,
             port: Int,
             host: String,
             connectionRequest: IConnectionRequest,
             useWebSockets: Boolean,
         ): IPCMqttClient {
-            return clientFactory.openConnection(port, host, useWebSockets, ControlPacketWrapper(connectionRequest))
+            val bundle = Bundle()
+            bundle.putParcelable(ParcelablePersistenceFactory.BUNDLE_KEY, persistenceFactory)
+            val wrapped = ControlPacketWrapper(connectionRequest)
+            val result = clientFactory.openConnection(port, host, useWebSockets, wrapped, bundle)
+            return result
         }
     }
 }

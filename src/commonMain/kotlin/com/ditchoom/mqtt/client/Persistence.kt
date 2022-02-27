@@ -8,7 +8,6 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 
 interface Persistence {
-    suspend fun getAllPendingIds(): Set<Int>
     suspend fun nextPacketIdentifier(persist: Boolean = true): Int
     suspend fun save(packetIdentifier: Int, data: ControlPacket)
     suspend fun delete(id: Int)
@@ -17,7 +16,6 @@ interface Persistence {
 
 class InMemoryPersistence : Persistence {
     private val queue = HashMap<Int, ControlPacket>()
-    override suspend fun getAllPendingIds() = queue.keys
     private val count = atomic(1)
 
     override suspend fun nextPacketIdentifier(persist: Boolean): Int {
@@ -29,7 +27,6 @@ class InMemoryPersistence : Persistence {
             queue[nextId] = FakeControlPacket
         }
         return nextId
-//        throw IllegalStateException("Too many queued messages. Can't get a new packet identifier.")
     }
 
     override suspend fun save(packetIdentifier: Int, data: ControlPacket) {

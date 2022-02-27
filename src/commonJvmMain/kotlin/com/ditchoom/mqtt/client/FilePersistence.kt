@@ -21,14 +21,6 @@ class FilePersistence(
     val localDirectory = File(File(parentDirectory, "$host:$port"), clientId).also { it.mkdirs() }
     val controlPacketDirectory = File(localDirectory, "control-packets").also { it.mkdirs() }
 
-    override suspend fun getAllPendingIds(): Set<Int> {
-        val set = HashSet<Int>()
-        controlPacketDirectory.iterateFilesFast { file ->
-            file.name.toIntOrNull()?.let { num -> set += num }
-        }
-        return set
-    }
-
     override suspend fun nextPacketIdentifier(persist: Boolean): Int {
         var packetId = 1
         var file: File

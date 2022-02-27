@@ -11,7 +11,8 @@ interface IPCMqttClientFactory {
      int port,
      in String host,
      boolean useWebsockets,
-     in ControlPacketWrapper connectionRequest
+     in ControlPacketWrapper connectionRequest,
+     in Bundle persistence
     );
 
     void killConnection(in IPCMqttClient client);

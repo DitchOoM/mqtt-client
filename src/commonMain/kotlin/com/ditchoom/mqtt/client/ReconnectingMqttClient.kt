@@ -371,6 +371,7 @@ class ReconnectingMqttClient private constructor(
 
         fun stayConnected(
             parentScope: CoroutineScope,
+            persistence: Persistence,
             connectionRequest: IConnectionRequest,
             port: UShort,
             hostname: String = "localhost",
@@ -388,7 +389,7 @@ class ReconnectingMqttClient private constructor(
                 hostname,
                 useWebsockets,
                 connectTimeout,
-                InMemoryPersistence(),
+                persistence,
                 keepAliveDelay,
                 MutableSharedFlow(),
             )
